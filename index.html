@@ -2,28 +2,38 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' https://api.github.com; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' https://api.github.com; img-src 'self' data:; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="theme-color" content="#2f6fde">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="問題交換站">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
 <title>問題分析交換站</title>
 <style>
 :root{
   --bg:#f6f7f9;--card:#fff;--fg:#1d2330;--muted:#6b7280;--line:#e3e6eb;
   --accent:#2f6fde;--accent-fg:#fff;--ok:#1f8a4c;--warn:#b7791f;--danger:#c0392b;--code:#f1f3f6;
+  --r-claude:#2f6fde;--r-note:#8a5cf6;--r-exec:#b7791f;
 }
 @media (prefers-color-scheme:dark){
   :root{--bg:#12151b;--card:#1b2029;--fg:#e6e9ef;--muted:#9aa3b2;--line:#2c3340;
-    --accent:#5b8ff0;--accent-fg:#0b1020;--ok:#4cc38a;--warn:#e0a84a;--danger:#ef6b5b;--code:#11151c}
+    --accent:#5b8ff0;--accent-fg:#0b1020;--ok:#4cc38a;--warn:#e0a84a;--danger:#ef6b5b;--code:#11151c;
+    --r-claude:#5b8ff0;--r-note:#a98bfa;--r-exec:#e0a84a}
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,-apple-system,"Segoe UI","Noto Sans TC","Microsoft JhengHei",sans-serif}
-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--card);position:sticky;top:0;z-index:5}
+header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top));border-bottom:1px solid var(--line);background:var(--card);position:sticky;top:0;z-index:5}
 header h1{font-size:17px;margin:0}
 #lockState{font-size:13px;color:var(--muted)}
 nav{display:flex;gap:6px;padding:10px 16px;overflow-x:auto}
 nav button{flex:1;min-width:84px}
-main{max-width:860px;margin:0 auto;padding:0 16px 80px}
+main{max-width:860px;margin:0 auto;padding:0 16px calc(80px + env(safe-area-inset-bottom))}
 section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-top:12px}
 h2{font-size:16px;margin:0 0 12px}
 h3{font-size:14px;margin:16px 0 6px;color:var(--muted)}
@@ -34,6 +44,7 @@ button{padding:10px 14px;border-radius:8px;border:1px solid var(--line);backgrou
 button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
 button.danger{color:var(--danger)}
 button.on{outline:2px solid var(--accent)}
+button.sm{padding:4px 10px;font-size:13px}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .row>button{flex:1 1 140px}
 .hint{font-size:13px;color:var(--muted);margin:6px 0 0}
@@ -42,9 +53,26 @@ pre{white-space:pre-wrap;word-break:break-word;background:var(--code);padding:10
 .case .t{font-weight:600}
 .case .d{font-size:12px;color:var(--muted)}
 .badge{font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid currentColor;white-space:nowrap}
-.s-open{color:var(--warn)}.s-analyzed{color:var(--accent)}.s-done{color:var(--ok)}
+.s-open{color:var(--warn)}.s-pending{color:var(--r-note)}.s-analyzed{color:var(--accent)}.s-done{color:var(--ok)}
 details summary{cursor:pointer;color:var(--muted);font-size:14px;margin-top:12px}
-#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw}
+.entry{border-left:3px solid var(--line);padding:4px 0 4px 12px;margin:14px 0}
+.entry.claude{border-color:var(--r-claude)}.entry.note{border-color:var(--r-note)}.entry.exec{border-color:var(--r-exec)}
+.entry-h{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:13px;margin-bottom:6px}
+.entry-h b{font-weight:600;white-space:nowrap}
+.entry-h button{white-space:nowrap}
+.entry.claude .entry-h b{color:var(--r-claude)}.entry.note .entry-h b{color:var(--r-note)}.entry.exec .entry-h b{color:var(--r-exec)}
+.entry-h span{color:var(--muted);flex:1;min-width:120px}
+.md{font-size:15px;overflow-wrap:anywhere}
+.md h3,.md h4,.md h5,.md h6{color:var(--fg);margin:14px 0 6px}
+.md h3{font-size:16px}.md h4{font-size:15px}.md h5,.md h6{font-size:14px}
+.md p{margin:6px 0}
+.md ul,.md ol{margin:6px 0;padding-left:22px}
+.md li{margin:3px 0}
+.md code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:13px;font-family:ui-monospace,Consolas,monospace}
+.codewrap{position:relative;margin:8px 0}
+.codewrap button{position:absolute;top:6px;right:6px;opacity:.85}
+.codewrap pre{padding-top:34px}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;z-index:10}
 #toast.show{opacity:1}
 [hidden]{display:none!important}
 </style>
@@ -76,6 +104,14 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px;margin-top:12px
     <div class="row"><button id="btnSaveCfg">儲存設定</button><button id="btnClearCfg" class="danger">清除 token</button></div>
     <p class="hint">未設定 token 時，存檔會改為下載 cases.json，需自行上傳覆蓋 repo 中的檔案。</p>
   </details>
+  <details id="rekeyBox" hidden>
+    <summary>🔁 更換密語</summary>
+    <label>目前密語</label><input id="rkOld" type="password" autocomplete="off">
+    <label>新密語（至少 12 字，建議 16 字以上）</label><input id="rkNew" type="password" autocomplete="off">
+    <label>再輸入一次新密語</label><input id="rkNew2" type="password" autocomplete="off">
+    <div class="row"><button class="primary" id="btnRekey">重新加密全部資料</button></div>
+    <p class="hint">完成後其他裝置要改用新密語解鎖。注意：git 歷史中的舊版本仍可用舊密語解開。</p>
+  </details>
 </section>
 
 <section id="tab-list" hidden>
@@ -88,27 +124,35 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px;margin-top:12px
   <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
     <h2 id="dTitle" style="margin:0"></h2><span id="dBadge" class="badge"></span>
   </div>
-  <h3>問題描述</h3><pre id="dDesc"></pre>
-  <h3>環境 / 系統</h3><pre id="dEnv"></pre>
-  <h3>程式碼 / 錯誤訊息</h3><pre id="dCode"></pre>
+  <details id="dProblem">
+    <summary>📄 原始問題</summary>
+    <h3>問題描述</h3><pre id="dDesc"></pre>
+    <h3>環境 / 系統</h3><pre id="dEnv"></pre>
+    <h3>程式碼 / 錯誤訊息</h3><pre id="dCode"></pre>
+  </details>
 
-  <h3>① 給 Claude 分析</h3>
+  <h3>💬 處理紀錄</h3>
+  <div id="dThread"></div>
+
+  <h3>送出</h3>
   <div class="row">
-    <button class="primary" id="btnCopyClaude">📋 複製給 Claude</button>
+    <button class="primary" id="btnShareClaude" hidden>📤 分享給 Claude</button>
+    <button id="btnCopyClaude">📋 複製給 Claude</button>
     <button id="btnOpenClaude">↗ 開啟 Claude</button>
   </div>
+  <div class="row"><button id="btnCopyCopilot" hidden>📋 複製最新計劃給 MS Copilot</button></div>
+  <p class="hint" id="dSendHint"></p>
 
-  <h3>② 回填 Claude 的分析結果與操作步驟</h3>
-  <textarea id="dResultIn" placeholder="把 Claude 的完整回覆貼在這裡"></textarea>
+  <h3>新增紀錄</h3>
+  <select id="dRole">
+    <option value="claude">🤖 Claude 回覆</option>
+    <option value="exec">🛠 Copilot 執行結果 / 錯誤</option>
+    <option value="note">📝 補充資料</option>
+  </select>
+  <textarea id="dEntryIn" style="margin-top:8px"></textarea>
   <div class="row">
     <button id="btnPaste">📥 從剪貼簿貼上</button>
-    <button class="primary" id="btnSaveResult">🔐 加密存回</button>
-  </div>
-
-  <div id="dResultBox" hidden>
-    <h3>③ 已存的分析結果（<span id="dResultTime"></span>）</h3>
-    <pre id="dResult"></pre>
-    <div class="row"><button class="primary" id="btnCopyCopilot">📋 複製給 MS Copilot</button></div>
+    <button class="primary" id="btnAddEntry">🔐 加密存入</button>
   </div>
 
   <div class="row">
@@ -137,7 +181,14 @@ const ITER = 600000;
 const IDLE_MS = 10 * 60 * 1000;
 const $ = s => document.querySelector(s);
 const te = new TextEncoder(), td = new TextDecoder();
-const STATUS = { open: '待分析', analyzed: '已分析', done: '已完成' };
+const STATUS = { open: '待分析', pending: '待 Claude 回覆', analyzed: '已分析', done: '已完成' };
+const ROLE = { claude: '🤖 Claude 回覆', exec: '🛠 Copilot 執行結果', note: '📝 補充資料' };
+const PLACEHOLDER = {
+  claude: '把 Claude 的完整回覆貼在這裡',
+  exec: '貼上 Copilot 執行某一步的結果、錯誤訊息或畫面文字，之後再分享給 Claude 繼續分析',
+  note: '補充 Claude 詢問的資料，或你想追加的說明'
+};
+const canShare = !!navigator.share && matchMedia('(pointer:coarse)').matches;
 let S = { file: null, sha: null, key: null, plain: {}, current: null };
 
 // ---------- utils ----------
@@ -155,6 +206,47 @@ async function copy(text) {
   catch { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
   toast('✅ 已複製到剪貼簿');
 }
+async function share(text) {
+  try { await navigator.share({ text }); }
+  catch (e) { if (e.name !== 'AbortError') { await copy(text); toast('無法分享，已改為複製到剪貼簿', 3000); } }
+}
+
+// ---------- markdown（先跳脫再加標籤，不支援連結與 HTML） ----------
+function esc(s) { return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function inline(s) { return esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>'); }
+function codeBlock(text) {
+  const w = document.createElement('div'); w.className = 'codewrap';
+  const b = document.createElement('button'); b.className = 'sm'; b.textContent = '複製'; b.onclick = () => copy(text);
+  const pre = document.createElement('pre'); pre.textContent = text;
+  w.append(b, pre); return w;
+}
+function renderMd(text, into) {
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  let list = null, para = null, m;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (/^\s*```/.test(l)) {
+      list = para = null;
+      const buf = [];
+      while (++i < lines.length && !/^\s*```/.test(lines[i])) buf.push(lines[i]);
+      into.append(codeBlock(buf.join('\n')));
+    } else if ((m = l.match(/^(#{1,6})\s+(.*)/))) {
+      list = para = null;
+      const h = document.createElement('h' + Math.min(6, m[1].length + 2)); h.innerHTML = inline(m[2]); into.append(h);
+    } else if ((m = l.match(/^\s*([-*•]|\d+[.)])\s+(.*)/))) {
+      para = null;
+      const tag = /\d/.test(m[1]) ? 'OL' : 'UL';
+      if (!list || list.tagName !== tag) { list = document.createElement(tag); if (tag === 'OL') list.start = parseInt(m[1], 10); into.append(list); }
+      const li = document.createElement('li'); li.innerHTML = inline(m[2]); list.append(li);
+    } else if (!l.trim()) {
+      list = para = null;
+    } else if (para) {
+      para.innerHTML += '<br>' + inline(l);
+    } else {
+      list = null; para = document.createElement('p'); para.innerHTML = inline(l); into.append(para);
+    }
+  }
+}
 
 // ---------- crypto ----------
 async function deriveKey(pass, salt, iter) {
@@ -162,13 +254,13 @@ async function deriveKey(pass, salt, iter) {
   return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: iter, hash: 'SHA-256' }, base,
     { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
 }
-async function seal(obj) {
+async function seal(obj, key = S.key) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, S.key, te.encode(JSON.stringify(obj)));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, te.encode(JSON.stringify(obj)));
   return { iv: toB64(iv), ct: toB64(ct) };
 }
-async function unseal(box) {
-  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(box.iv) }, S.key, fromB64(box.ct));
+async function unseal(box, key = S.key) {
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(box.iv) }, key, fromB64(box.ct));
   return JSON.parse(td.decode(pt));
 }
 
@@ -214,7 +306,7 @@ async function loadFile() {
     if (r.status === 404) return { file: null, sha: null };
     if (!r.ok) throw new Error('GitHub 讀取失敗 (' + r.status + ')，請檢查 token / repo 設定');
     const j = await r.json();
-    if (!j.content) throw new Error('資料檔超過 1MB，請封存舊案件');
+    if (!j.content) throw new Error('資料檔超過 1MB，請刪除已完成的案件');
     return { file: JSON.parse(td.decode(fromB64(j.content.replace(/\n/g, '')))), sha: j.sha };
   }
   const r = await fetch(c.path + '?t=' + Date.now(), { cache: 'no-store' });
@@ -227,6 +319,11 @@ function download(text, name) {
   a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
   a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
+function putFile(c, msg, file, sha) {
+  const body = { message: msg, content: toB64(te.encode(JSON.stringify(file, null, 1))), branch: c.branch };
+  if (sha) body.sha = sha;
+  return fetch(apiUrl(c), { method: 'PUT', headers: { ...ghHeaders(c), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+}
 // mutate() 會在遠端衝突時套用到最新版本後重送一次
 async function commit(msg, mutate) {
   mutate(S.file);
@@ -237,14 +334,12 @@ async function commit(msg, mutate) {
     await decryptAll(); return;
   }
   for (let attempt = 0; attempt < 2; attempt++) {
-    const body = { message: msg, content: toB64(te.encode(JSON.stringify(S.file, null, 1))), branch: c.branch };
-    if (S.sha) body.sha = S.sha;
-    const r = await fetch(apiUrl(c), { method: 'PUT', headers: { ...ghHeaders(c), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const r = await putFile(c, msg, S.file, S.sha);
     if (r.ok) { S.sha = (await r.json()).content.sha; await decryptAll(); toast('✅ 已加密並提交到 GitHub'); return; }
     if ((r.status === 409 || r.status === 422) && attempt === 0) {
       const fresh = await loadFile();
       if (fresh.file) {
-        if (fresh.file.kdf.salt !== S.file.kdf.salt) throw new Error('遠端資料庫的金鑰不同，已中止');
+        if (fresh.file.kdf.salt !== S.file.kdf.salt) throw new Error('遠端資料庫已更換密語，請重新解鎖');
         S.file = fresh.file;
         mutate(S.file);
       }
@@ -254,9 +349,17 @@ async function commit(msg, mutate) {
     throw new Error('GitHub 提交失敗 (' + r.status + ')');
   }
 }
+// 舊版案件的單一結果 c.r 視為處理紀錄的第一筆 Claude 回覆
+const boxesOf = c => [...(c.r ? [c.r] : []), ...(c.t || [])];
+const norm = o => ({ role: o.role || 'claude', text: o.text, at: o.at || o.updated });
+function migrate(c) { if (c.r) { c.t = [c.r, ...(c.t || [])]; delete c.r; } c.t = c.t || []; }
 async function decryptAll() {
   const plain = {};
-  for (const c of S.file.cases) plain[c.id] = { p: await unseal(c.p), r: c.r ? await unseal(c.r) : null };
+  for (const c of S.file.cases) {
+    const t = [];
+    for (const b of boxesOf(c)) t.push({ ...norm(await unseal(b)), iv: b.iv });
+    plain[c.id] = { p: await unseal(c.p), t };
+  }
   S.plain = plain;
 }
 
@@ -280,12 +383,15 @@ async function unlock() {
   S.file = f; S.sha = sha; $('#pass').value = '';
   await decryptAll();
   $('#lockState').textContent = '🔓 已解鎖';
+  $('#rekeyBox').hidden = false;
   renderList(); show('list');
 }
 function lock(reason) {
   S = { file: null, sha: null, key: null, plain: {}, current: null };
-  $('#caseList').textContent = ''; $('#dResultIn').value = '';
-  ['#dTitle', '#dDesc', '#dEnv', '#dCode', '#dResult'].forEach(s => $(s).textContent = '');
+  $('#caseList').textContent = ''; $('#dThread').textContent = ''; $('#dEntryIn').value = '';
+  ['#dTitle', '#dDesc', '#dEnv', '#dCode'].forEach(s => $(s).textContent = '');
+  ['#rkOld', '#rkNew', '#rkNew2'].forEach(s => $(s).value = '');
+  $('#rekeyBox').hidden = true; $('#rekeyBox').open = false;
   $('#lockState').textContent = '🔒 未解鎖';
   show('unlock');
   if (reason) toast(reason);
@@ -293,6 +399,46 @@ function lock(reason) {
 let idleTimer;
 function bumpIdle() { clearTimeout(idleTimer); if (S.key) idleTimer = setTimeout(() => lock('閒置過久，已自動上鎖'), IDLE_MS); }
 ['click', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, bumpIdle, { passive: true }));
+
+// ---------- 更換密語 ----------
+async function rekey() {
+  const cur = $('#rkOld').value, n1 = $('#rkNew').value, n2 = $('#rkNew2').value;
+  if (!cur) throw new Error('請輸入目前密語');
+  if (n1.length < 12) throw new Error('新密語至少 12 字');
+  if (n1 !== n2) throw new Error('兩次輸入的新密語不一致');
+  if (n1 === cur) throw new Error('新密語不能與目前相同');
+  const c = cfg();
+  // 以遠端最新版本為準，避免蓋掉其他裝置剛存的內容
+  let src = S.file, sha = S.sha;
+  if (useApi(c)) { const fresh = await loadFile(); if (fresh.file) { src = fresh.file; sha = fresh.sha; } }
+  const oldKey = await deriveKey(cur, fromB64(src.kdf.salt), src.kdf.iter);
+  try { await unseal(src.check, oldKey); } catch { throw new Error('目前密語錯誤'); }
+  if (!confirm('將用新密語重新加密全部資料並提交。\n完成後其他裝置必須改用新密語解鎖，確定？')) return;
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const newKey = await deriveKey(n1, salt, ITER);
+  const re = async b => seal(await unseal(b, oldKey), newKey);
+  const out = { version: 1, kdf: { alg: 'PBKDF2-SHA256', iter: ITER, salt: toB64(salt) }, check: await seal({ ok: true }, newKey), cases: [] };
+  for (const cs of src.cases) {
+    const t = [];
+    for (const b of boxesOf(cs)) t.push(await re(b));
+    const { r, ...rest } = cs;
+    out.cases.push({ ...rest, p: await re(cs.p), t });
+  }
+  if (useApi(c)) {
+    const r = await putFile(c, 'rekey', out, sha);
+    if (r.status === 409 || r.status === 422) throw new Error('遠端資料剛被更新，請再按一次');
+    if (!r.ok) throw new Error('GitHub 提交失敗 (' + r.status + ')');
+    S.sha = (await r.json()).content.sha;
+  } else {
+    download(JSON.stringify(out, null, 1), 'cases.json');
+  }
+  S.file = out; S.key = newKey;
+  await decryptAll();
+  ['#rkOld', '#rkNew', '#rkNew2'].forEach(s => $(s).value = '');
+  $('#rekeyBox').open = false;
+  renderList();
+  toast(useApi(c) ? '✅ 已更換密語並提交' : '已下載新的 cases.json，請上傳覆蓋', 4500);
+}
 
 // ---------- views ----------
 function show(tab) {
@@ -306,46 +452,69 @@ function renderList() {
   const cases = [...S.file.cases].sort((a, b) => b.updated - a.updated);
   if (!cases.length) { box.innerHTML = '<p class="hint">目前沒有案件。</p>'; return; }
   for (const c of cases) {
-    const p = S.plain[c.id].p;
+    const { p, t } = S.plain[c.id];
     const el = document.createElement('div'); el.className = 'case';
     const left = document.createElement('div');
-    const t = document.createElement('div'); t.className = 't'; t.textContent = p.title || '(未命名)';
-    const d = document.createElement('div'); d.className = 'd'; d.textContent = '更新：' + fmt(c.updated);
-    left.append(t, d);
-    const b = document.createElement('span'); b.className = 'badge s-' + c.status; b.textContent = STATUS[c.status];
+    const tt = document.createElement('div'); tt.className = 't'; tt.textContent = p.title || '(未命名)';
+    const d = document.createElement('div'); d.className = 'd'; d.textContent = `更新：${fmt(c.updated)}・${t.length} 筆紀錄`;
+    left.append(tt, d);
+    const b = document.createElement('span'); b.className = 'badge s-' + c.status; b.textContent = STATUS[c.status] || c.status;
     el.append(left, b);
     el.onclick = () => openCase(c.id);
     box.append(el);
   }
 }
+function renderThread() {
+  const { t } = S.plain[S.current], box = $('#dThread');
+  box.textContent = '';
+  if (!t.length) { box.innerHTML = '<p class="hint">還沒有紀錄。先把問題送給 Claude，再把回覆存回來。</p>'; return; }
+  t.forEach((e, i) => {
+    const el = document.createElement('div'); el.className = 'entry ' + e.role;
+    const h = document.createElement('div'); h.className = 'entry-h';
+    const who = document.createElement('b'); who.textContent = `#${i + 1} ${ROLE[e.role]}`;
+    const when = document.createElement('span'); when.textContent = fmt(e.at);
+    const cp = document.createElement('button'); cp.className = 'sm'; cp.textContent = '複製'; cp.onclick = () => copy(e.text);
+    const del = document.createElement('button'); del.className = 'sm danger'; del.textContent = '刪除';
+    del.onclick = ev => { if (confirm(`刪除第 ${i + 1} 筆紀錄？`)) busy(ev.target, () => delEntry(e.iv)); };
+    h.append(who, when, cp, del);
+    const body = document.createElement('div');
+    if (e.role === 'claude') { body.className = 'md'; renderMd(e.text, body); }
+    else { const pre = document.createElement('pre'); pre.textContent = e.text; body.append(pre); }
+    el.append(h, body);
+    box.append(el);
+  });
+}
 function openCase(id) {
   S.current = id;
-  const c = S.file.cases.find(x => x.id === id), { p, r } = S.plain[id];
+  const c = S.file.cases.find(x => x.id === id), { p, t } = S.plain[id];
   $('#dTitle').textContent = p.title;
-  $('#dBadge').className = 'badge s-' + c.status; $('#dBadge').textContent = STATUS[c.status];
+  $('#dBadge').className = 'badge s-' + c.status; $('#dBadge').textContent = STATUS[c.status] || c.status;
   $('#dDesc').textContent = p.desc || '—'; $('#dEnv').textContent = p.env || '—'; $('#dCode').textContent = p.code || '—';
-  $('#dResultIn').value = '';
-  $('#dResultBox').hidden = !r;
-  if (r) { $('#dResult').textContent = r.text; $('#dResultTime').textContent = fmt(r.updated); }
+  $('#dProblem').open = !t.length;
+  renderThread();
+  const hasPlan = t.some(e => e.role === 'claude');
+  $('#btnCopyCopilot').hidden = !hasPlan;
+  $('#btnShareClaude').hidden = !canShare;
+  $('#dSendHint').textContent = t.length
+    ? '送給 Claude 的內容會包含原始問題與全部處理紀錄，可開新對話貼上。'
+    : '第一次分析：送出原始問題，請 Claude 依固定格式回覆。';
+  // 預設下一筆紀錄的類型：最後一筆是 Claude → 通常接著是執行結果；否則等 Claude 回覆
+  const last = t[t.length - 1];
+  $('#dRole').value = last && last.role === 'claude' ? 'exec' : 'claude';
+  $('#dEntryIn').value = ''; $('#dEntryIn').placeholder = PLACEHOLDER[$('#dRole').value];
   show('detail');
 }
 
 // ---------- prompts ----------
-function claudePrompt(p) {
-  return `你是資深軟體工程師，請分析以下公司系統問題，用繁體中文回覆，並嚴格依照這個格式：
-
-## 1. 問題摘要
+const FORMAT = `## 1. 問題摘要
 ## 2. 根因分析（列出可能原因並依可能性排序）
 ## 3. 修正方案（附完整修改後程式碼，標明檔案與位置）
 ## 4. 操作步驟計劃（給 Microsoft Copilot 依序執行）
 - 逐步編號，每步只做一件事，寫清楚要開哪個檔案/工具、改什麼、預期看到什麼
 - 每步附「驗證方式」
-## 5. 風險與回復方式
-
-資訊不足時，請在最前面列出需要我補充的問題。
-
----
-【標題】${p.title}
+## 5. 風險與回復方式`;
+function problemText(p) {
+  return `【標題】${p.title}
 
 【問題描述】
 ${p.desc || '（無）'}
@@ -358,41 +527,86 @@ ${p.env || '（無）'}
 ${p.code || '（無）'}
 \`\`\``;
 }
-function copilotPrompt(p, r) {
+function claudePrompt(p, t) {
+  if (!t.length) return `你是資深軟體工程師，請分析以下公司系統問題，用繁體中文回覆，並嚴格依照這個格式：
+
+${FORMAT}
+
+資訊不足時，請在最前面列出需要我補充的問題。
+
+---
+${problemText(p)}`;
+  const log = t.map((e, i) => `### [${i + 1}] ${ROLE[e.role].replace(/^\S+\s/, '')}（${fmt(e.at)}）\n${e.text}`).join('\n\n');
+  return `你是資深軟體工程師，我們正在處理以下公司系統問題。下面附上原始問題與目前為止的處理紀錄（依時間排序，最後一筆是最新進展），請根據最新進展繼續分析，用繁體中文回覆。
+
+- 若計劃需要調整，請輸出「更新後的完整操作步驟計劃」（給 Microsoft Copilot 依序執行，逐步編號並附驗證方式），並先用一段話說明改了什麼、為什麼
+- 若問題已解決，請確認並列出收尾與驗證事項
+- 資訊不足時，請在最前面列出需要我補充的問題
+
+完整回覆格式參考：
+${FORMAT}
+
+---
+【原始問題】
+${problemText(p)}
+
+---
+【處理紀錄】
+${log}`;
+}
+function copilotPrompt(p, t) {
+  const idx = t.map(e => e.role).lastIndexOf('claude');
   return `以下是某個系統問題的分析結果與「操作步驟計劃」。請依照操作步驟計劃，一步一步協助我執行：
 - 每次只進行一個步驟，完成後等我回報結果再進行下一步
 - 若步驟內容與我實際環境不符，先指出差異並提出調整建議
 - 修改程式前先說明要改哪裡
+- 若執行失敗，請整理「執行到哪一步、完整錯誤訊息、目前狀態」讓我帶回去給原分析者
 
-【案件】${p.title}
+【案件】${p.title}（第 ${idx + 1} 筆紀錄的計劃）
 
-${r.text}`;
+${t[idx].text}`;
 }
 
 // ---------- actions ----------
 const SECRET_RE = /(password|passwd|pwd|secret|api[_-]?key|access[_-]?token|connectionstring)\s*[:=]|-----BEGIN [A-Z ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16}|ghp_[0-9A-Za-z]{36}/i;
+const findCase = (f, id) => f.cases.find(x => x.id === id);
 
 async function addCase() {
   const p = { title: $('#nTitle').value.trim(), desc: $('#nDesc').value.trim(), env: $('#nEnv').value.trim(), code: $('#nCode').value };
   if (!p.title) throw new Error('請填寫標題');
   if (SECRET_RE.test(p.desc + '\n' + p.code) && !confirm('偵測到疑似密碼 / 金鑰 / 連線字串，確定仍要儲存？')) return;
   const now = Date.now();
-  const entry = { id: now.toString(36) + Math.random().toString(36).slice(2, 6), created: now, updated: now, status: 'open', p: await seal(p), r: null };
+  const entry = { id: now.toString(36) + Math.random().toString(36).slice(2, 6), created: now, updated: now, status: 'open', p: await seal(p), t: [] };
   await commit('add case ' + entry.id, f => { f.cases.push(entry); });
   ['#nTitle', '#nDesc', '#nEnv', '#nCode'].forEach(s => $(s).value = '');
   renderList(); show('list');
 }
-async function saveResult() {
-  const text = $('#dResultIn').value.trim();
-  if (!text) throw new Error('請先貼上 Claude 的回覆');
-  const id = S.current, now = Date.now(), box = await seal({ text, updated: now });
-  await commit('result ' + id, f => { const c = f.cases.find(x => x.id === id); if (c) { c.r = box; c.status = 'analyzed'; c.updated = now; } });
+async function addEntry() {
+  const text = $('#dEntryIn').value.trim(), role = $('#dRole').value;
+  if (!text) throw new Error('請先輸入或貼上內容');
+  if (role !== 'claude' && SECRET_RE.test(text) && !confirm('偵測到疑似密碼 / 金鑰 / 連線字串，確定仍要儲存？')) return;
+  const id = S.current, now = Date.now(), box = await seal({ role, text, at: now });
+  await commit(`${role} ${id}`, f => {
+    const c = findCase(f, id); if (!c) return;
+    migrate(c); c.t.push(box); c.updated = now;
+    c.status = role === 'claude' ? 'analyzed' : 'pending';
+  });
+  if (!S.plain[id]) { renderList(); show('list'); toast('案件已被其他裝置刪除'); return; }
   renderList(); openCase(id);
+  toast(role === 'claude' ? '✅ 已存入，可在公司電腦複製給 Copilot' : '✅ 已存入，可分享給 Claude 繼續分析', 3000);
+}
+async function delEntry(iv) {
+  const id = S.current, now = Date.now();
+  await commit('delete entry ' + id, f => {
+    const c = findCase(f, id); if (!c) return;
+    migrate(c); c.t = c.t.filter(b => b.iv !== iv); c.updated = now;
+  });
+  renderList(); if (S.plain[id]) openCase(id); else show('list');
 }
 async function setDone() {
   const id = S.current, now = Date.now();
-  await commit('done ' + id, f => { const c = f.cases.find(x => x.id === id); if (c) { c.status = 'done'; c.updated = now; } });
-  renderList(); openCase(id);
+  await commit('done ' + id, f => { const c = findCase(f, id); if (c) { c.status = 'done'; c.updated = now; } });
+  renderList(); if (S.plain[id]) openCase(id); else show('list');
 }
 async function delCase() {
   if (!confirm('確定刪除這個案件？（git 歷史中仍保留加密內容）')) return;
@@ -400,6 +614,7 @@ async function delCase() {
   await commit('delete ' + id, f => { f.cases = f.cases.filter(x => x.id !== id); });
   renderList(); show('list');
 }
+const cur = () => S.plain[S.current];
 
 // ---------- wiring ----------
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => { if (b.dataset.tab === 'list' && S.key) renderList(); show(b.dataset.tab); });
@@ -408,19 +623,22 @@ $('#pass').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnUnlo
 $('#btnLock').onclick = () => lock('已上鎖');
 $('#btnSaveCfg').onclick = saveCfg;
 $('#btnClearCfg').onclick = () => { try { localStorage.removeItem('pax.tok'); sessionStorage.removeItem('pax.tok'); } catch {} $('#cfgToken').value = ''; toast('token 已清除'); };
+$('#btnRekey').onclick = e => busy(e.target, rekey);
 $('#btnReload').onclick = e => busy(e.target, async () => {
   const { file, sha } = await loadFile();
   if (!file) throw new Error('遠端沒有資料檔');
-  if (file.kdf.salt !== S.file.kdf.salt) throw new Error('遠端資料庫金鑰不同，請重新解鎖');
+  if (file.kdf.salt !== S.file.kdf.salt) throw new Error('遠端資料庫已更換密語，請重新解鎖');
   S.file = file; S.sha = sha; await decryptAll(); renderList(); toast('已同步');
 });
 $('#btnAdd').onclick = e => busy(e.target, addCase);
-$('#btnBack').onclick = () => show('list');
-$('#btnCopyClaude').onclick = () => copy(claudePrompt(S.plain[S.current].p));
+$('#btnBack').onclick = () => { renderList(); show('list'); };
+$('#btnShareClaude').onclick = () => share(claudePrompt(cur().p, cur().t));
+$('#btnCopyClaude').onclick = () => copy(claudePrompt(cur().p, cur().t));
 $('#btnOpenClaude').onclick = () => window.open('https://claude.ai/new', '_blank', 'noopener');
-$('#btnPaste').onclick = async () => { try { $('#dResultIn').value = await navigator.clipboard.readText(); } catch { toast('瀏覽器不允許讀取剪貼簿，請長按貼上'); } };
-$('#btnSaveResult').onclick = e => busy(e.target, saveResult);
-$('#btnCopyCopilot').onclick = () => { const { p, r } = S.plain[S.current]; copy(copilotPrompt(p, r)); };
+$('#btnCopyCopilot').onclick = () => copy(copilotPrompt(cur().p, cur().t));
+$('#dRole').onchange = () => { $('#dEntryIn').placeholder = PLACEHOLDER[$('#dRole').value]; };
+$('#btnPaste').onclick = async () => { try { $('#dEntryIn').value = await navigator.clipboard.readText(); } catch { toast('瀏覽器不允許讀取剪貼簿，請長按貼上'); } };
+$('#btnAddEntry').onclick = e => busy(e.target, addEntry);
 $('#btnDone').onclick = e => busy(e.target, setDone);
 $('#btnDelete').onclick = e => busy(e.target, delCase);
 fillCfg();
