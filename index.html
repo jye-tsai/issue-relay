@@ -31,6 +31,9 @@ body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,-app
 header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top));border-bottom:1px solid var(--line);background:var(--card);position:sticky;top:0;z-index:5}
 header h1{font-size:17px;margin:0}
 #lockState{font-size:13px;color:var(--muted)}
+.hdr-r{display:flex;align-items:center;gap:12px;white-space:nowrap}
+.hdr-r a,.hint a{color:var(--accent);text-decoration:none}
+.hdr-r a{font-size:13px}
 nav{display:flex;gap:6px;padding:10px 16px;overflow-x:auto}
 nav button{flex:1;min-width:84px}
 main{max-width:860px;margin:0 auto;padding:0 16px calc(80px + env(safe-area-inset-bottom))}
@@ -78,7 +81,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px;margin-top:12px
 </style>
 </head>
 <body>
-<header><h1>🔐 問題分析交換站</h1><span id="lockState">🔒 未解鎖</span></header>
+<header><h1>🔐 問題分析交換站</h1><span class="hdr-r"><a href="tool.html">🔐 小工具</a><span id="lockState">🔒 未解鎖</span></span></header>
 <nav>
   <button data-tab="unlock" class="on">🔑 解鎖</button>
   <button data-tab="list">📋 案件</button>
@@ -92,6 +95,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px;margin-top:12px
   <input id="pass" type="password" autocomplete="off" placeholder="建議 16 字以上">
   <div class="row"><button class="primary" id="btnUnlock">解鎖並載入</button><button id="btnLock">上鎖</button></div>
   <p class="hint">資料以 AES-256-GCM 加密，金鑰由 PBKDF2-SHA256（600,000 次）從密語推導。閒置 10 分鐘自動上鎖。</p>
+  <p class="hint">🔐 加密／解密小工具：<a href="tool.html">線上開啟</a>・<a href="tool.html" download="加密解密小工具.html">下載到電腦</a>（下載後用 Chrome / Edge 開啟，可離線使用）</p>
   <details>
     <summary>⚙️ GitHub 設定（用於直接提交回 repo）</summary>
     <label>Owner（帳號）</label><input id="cfgOwner">
@@ -155,6 +159,11 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px;margin-top:12px
     <option value="summary">📌 結案摘要（存入後標記完成）</option>
   </select>
   <textarea id="dEntryIn" style="margin-top:8px"></textarea>
+  <div id="dImport" hidden>
+    <p class="hint">🔐 偵測到小工具密文（IR1:），請輸入小工具的密語解開後再存入。</p>
+    <input id="dImpPass" type="password" autocomplete="off" placeholder="小工具的密語（不會儲存）">
+    <div class="row"><button class="primary" id="btnDImport">🔓 解開密文</button></div>
+  </div>
   <div class="row">
     <button id="btnPaste">📥 從剪貼簿貼上</button>
     <button class="primary" id="btnAddEntry">🔐 加密存入</button>
@@ -169,6 +178,15 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px;margin-top:12px
 
 <section id="tab-new" hidden>
   <h2>新增問題案件（建議在公司電腦操作）</h2>
+  <details id="nImport">
+    <summary>📥 匯入小工具密文（IR1:）</summary>
+    <label>密文</label>
+    <textarea id="impToken" placeholder="貼上 IR1: 開頭的密文" style="min-height:80px"></textarea>
+    <label>小工具的密語（只用來解密，不會儲存）</label>
+    <input id="impPass" type="password" autocomplete="off">
+    <div class="row"><button class="primary" id="btnImport">🔓 解密並填入下方欄位</button></div>
+    <p class="hint">案件格式的密文會自動對應到各欄位；一般文字則第一行當標題、其餘放入問題描述。填入後請確認再按「加密並儲存」。</p>
+  </details>
   <label>標題</label><input id="nTitle" placeholder="例：訂單匯出 CSV 時間欄位錯亂">
   <label>問題描述（現象、重現步驟、預期結果）</label><textarea id="nDesc"></textarea>
   <label>環境 / 系統（語言版本、框架、DB…）</label><input id="nEnv">
@@ -273,6 +291,26 @@ async function seal(obj, key = S.key) {
 async function unseal(box, key = S.key) {
   const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(box.iv) }, key, fromB64(box.ct));
   return JSON.parse(td.decode(pt));
+}
+// 小工具（tool.html）的 IR1: 密文：IR1: + base64(JSON {v,i,s,n,c})，每段密文有自己的 salt
+const IR_PREFIX = 'IR1:', IR_ITER_MIN = 100000, IR_ITER_MAX = 2000000;
+const isIR = s => s.trim().startsWith(IR_PREFIX);
+async function decryptIR(token, pass) {
+  let pack;
+  try { pack = JSON.parse(td.decode(fromB64(token.trim().slice(IR_PREFIX.length).replace(/\s+/g, '')))); }
+  catch { throw new Error('密文不完整或格式不符'); }
+  const iter = pack.i || ITER;
+  if (!Number.isInteger(iter) || iter < IR_ITER_MIN || iter > IR_ITER_MAX) throw new Error('密文的運算次數異常，已拒絕處理');
+  let text;
+  try {
+    const key = await deriveKey(pass, fromB64(pack.s), iter);
+    text = td.decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(pack.n) }, key, fromB64(pack.c)));
+  } catch { throw new Error('小工具密語錯誤，或密文不完整'); }
+  try {
+    const o = JSON.parse(text);
+    if (o && o.ir === 'case') return { case: { title: o.title || '', desc: o.desc || '', env: o.env || '', code: o.code || '' } };
+  } catch {}
+  return { text };
 }
 async function keyFor(pass, file) {
   const key = await deriveKey(pass, fromB64(file.kdf.salt), file.kdf.iter);
@@ -474,7 +512,7 @@ function lock(reason) {
   S = blank();
   $('#caseList').textContent = ''; $('#dThread').textContent = ''; $('#dSummary').textContent = ''; $('#dEntryIn').value = '';
   ['#dTitle', '#dDesc', '#dEnv', '#dCode'].forEach(s => $(s).textContent = '');
-  ['#rkOld', '#rkNew', '#rkNew2'].forEach(s => $(s).value = '');
+  ['#rkOld', '#rkNew', '#rkNew2', '#impToken', '#impPass', '#dImpPass'].forEach(s => $(s).value = '');
   $('#rekeyBox').hidden = true; $('#rekeyBox').open = false;
   $('#lockState').textContent = '🔒 未解鎖';
   show('unlock');
@@ -591,7 +629,7 @@ function renderCase() {
   // 預設下一筆紀錄的類型：最後一筆是 Claude → 通常接著是執行結果；否則等 Claude 回覆
   const last = t[t.length - 1];
   setRole(last && last.role === 'claude' ? 'exec' : 'claude');
-  $('#dEntryIn').value = '';
+  $('#dEntryIn').value = ''; $('#dImpPass').value = ''; checkEntryIR();
 }
 function setRole(r) { $('#dRole').value = r; $('#dEntryIn').placeholder = PLACEHOLDER[r]; }
 async function openCase(id) {
@@ -700,9 +738,35 @@ ${t[idx].text}`;
 // ---------- actions ----------
 const SECRET_RE = /(password|passwd|pwd|secret|api[_-]?key|access[_-]?token|connectionstring)\s*[:=]|-----BEGIN [A-Z ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16}|ghp_[0-9A-Za-z]{36}/i;
 
+async function importToNew() {
+  const tok = $('#impToken').value, pass = $('#impPass').value;
+  if (!isIR(tok)) throw new Error('請貼上 IR1: 開頭的密文');
+  if (!pass) throw new Error('請輸入小工具的密語');
+  const r = await decryptIR(tok, pass);
+  let c = r.case;
+  if (!c) {
+    const lines = r.text.replace(/\r\n?/g, '\n').split('\n'), first = lines[0].trim();
+    const asTitle = first.length > 0 && first.length <= 80;
+    c = { title: asTitle ? first : '', desc: (asTitle ? lines.slice(1) : lines).join('\n').trim(), env: '', code: '' };
+  }
+  $('#nTitle').value = c.title; $('#nDesc').value = c.desc; $('#nEnv').value = c.env; $('#nCode').value = c.code;
+  $('#impToken').value = ''; $('#impPass').value = ''; $('#nImport').open = false;
+  toast(r.case ? '✅ 已解開並填入各欄位，確認後按「加密並儲存」' : '✅ 已解開並填入（第一行當標題），確認後按「加密並儲存」', 3500);
+}
+function checkEntryIR() { $('#dImport').hidden = !isIR($('#dEntryIn').value); }
+async function importToEntry() {
+  const pass = $('#dImpPass').value;
+  if (!pass) throw new Error('請輸入小工具的密語');
+  const r = await decryptIR($('#dEntryIn').value, pass);
+  $('#dEntryIn').value = r.case ? problemText(r.case) : r.text;
+  $('#dImpPass').value = '';
+  checkEntryIR();
+  toast('✅ 已解開，確認內容後按「加密存入」', 3000);
+}
 async function addCase() {
   needApi();
   const p = { title: $('#nTitle').value.trim(), desc: $('#nDesc').value.trim(), env: $('#nEnv').value.trim(), code: $('#nCode').value };
+  if ([p.title, p.desc, p.env, p.code].some(isIR)) throw new Error('欄位中有 IR1 密文，請用上方「📥 匯入小工具密文」解開');
   if (!p.title) throw new Error('請填寫標題');
   if (SECRET_RE.test(p.desc + '\n' + p.code) && !confirm('偵測到疑似密碼 / 金鑰 / 連線字串，確定仍要儲存？')) return;
   const now = Date.now(), id = now.toString(36) + Math.random().toString(36).slice(2, 6);
@@ -718,6 +782,7 @@ async function addEntry() {
   needApi();
   const text = $('#dEntryIn').value.trim(), role = $('#dRole').value, id = S.current, now = Date.now();
   if (!text) throw new Error('請先輸入或貼上內容');
+  if (isIR(text)) throw new Error('請先輸入小工具密語，解開 IR1 密文後再存入');
   if (role === 'summary') {
     if (S.plain[id].s && !confirm('已有結案摘要，要以新內容取代嗎？')) return;
     const box = await seal({ text, at: now });
@@ -776,7 +841,11 @@ $('#btnOpenClaude').onclick = () => window.open('https://claude.ai/new', '_blank
 $('#btnCopyCopilot').onclick = () => copy(copilotPrompt(cur().p, cur().t));
 $('#btnAskSummary').onclick = () => { send(summaryPrompt(cur().p, cur().t)); setRole('summary'); };
 $('#dRole').onchange = () => setRole($('#dRole').value);
-$('#btnPaste').onclick = async () => { try { $('#dEntryIn').value = await navigator.clipboard.readText(); } catch { toast('瀏覽器不允許讀取剪貼簿，請長按貼上'); } };
+$('#btnPaste').onclick = async () => { try { $('#dEntryIn').value = await navigator.clipboard.readText(); checkEntryIR(); } catch { toast('瀏覽器不允許讀取剪貼簿，請長按貼上'); } };
+$('#dEntryIn').addEventListener('input', checkEntryIR);
+$('#btnImport').onclick = e => busy(e.target, importToNew);
+$('#btnDImport').onclick = e => busy(e.target, importToEntry);
+$('#dImpPass').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnDImport').click(); });
 $('#btnAddEntry').onclick = e => busy(e.target, addEntry);
 $('#btnDone').onclick = e => busy(e.target, setDone);
 $('#btnDelete').onclick = e => busy(e.target, delCase);
