@@ -1,0 +1,25 @@
+{
+ "version": 1,
+ "kdf": {
+  "alg": "PBKDF2-SHA256",
+  "iter": 600000,
+  "salt": "qasthZv9yS3O+/thSoBVQA=="
+ },
+ "cases": [
+  {
+   "id": "muo0nf9l2lm3",
+   "created": 1790767361289,
+   "updated": 1790767361289,
+   "status": "open",
+   "p": {
+    "iv": "sirKcW0JHs/iPHiY",
+    "ct": "+/3EXWmIQ0DBEu/G0u4+kl/2mchoPYCIER1NaMKEYf/V9IAYLw51iHxWySn9yyYXaiaYHT89nRplZMVT3g=="
+   },
+   "r": null
+  }
+ ],
+ "check": {
+  "iv": "H5OT1xsTR+Q3j2sd",
+  "ct": "1wDNiciLTW+7hjv8ic1R/75vpJt1PmZnWr8B"
+ }
+}
