@@ -107,7 +107,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px;margin-top:12px
   <h2>解鎖資料庫</h2>
   <label for="pass">通關密語（不會儲存，也不會上傳）</label>
   <input id="pass" type="password" autocomplete="off" placeholder="建議 16 字以上">
-  <div class="row"><button class="primary" id="btnUnlock">解鎖並載入</button><button id="btnLock">上鎖</button></div>
+  <div class="row"><button class="primary" id="btnBio" hidden>🙂 Face ID 解鎖</button><button class="primary" id="btnUnlock">解鎖並載入</button><button id="btnLock">上鎖</button></div>
   <p class="hint">資料以 AES-256-GCM 加密，金鑰由 PBKDF2-SHA256（600,000 次）從密語推導。閒置 10 分鐘自動上鎖。</p>
   <p class="hint">🔐 加密／解密小工具：<a href="tool.html">線上開啟</a>・<a href="tool.html" download="加密解密小工具.html">下載到電腦</a>（下載後用 Chrome / Edge 開啟，可離線使用）</p>
   <details>
@@ -121,6 +121,15 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px;margin-top:12px
     <label><input id="cfgRemember" type="checkbox" style="width:auto"> 在此裝置記住 token（否則關閉分頁即清除）</label>
     <div class="row"><button id="btnSaveCfg">儲存設定</button><button id="btnClearCfg" class="danger">清除 token</button></div>
     <p class="hint">未設定 token 時只能讀取，無法存檔。</p>
+  </details>
+  <details id="bioBox" hidden>
+    <summary id="bioSum">🙂 Face ID 解鎖</summary>
+    <div id="bioOff">
+      <label>輸入目前密語以啟用（只限這台裝置）</label><input id="bioPass" type="password" autocomplete="off">
+      <div class="row"><button class="primary" id="btnBioOn">啟用 Face ID 解鎖</button></div>
+    </div>
+    <div class="row" id="bioOn" hidden><button class="danger" id="btnBioOff">停用 Face ID 解鎖</button></div>
+    <p class="hint">用通行密鑰的 PRF 功能：Face ID 通過後才取得解密用的秘密，密語以此加密存在這台裝置，沒通過 Face ID 解不開。需 iOS 18 / Chrome 132 以上；密語仍可隨時手動輸入。</p>
   </details>
   <details id="rekeyBox" hidden>
     <summary>🔁 更換密語</summary>
@@ -528,8 +537,7 @@ async function migrateLegacy(legacy) {
 }
 
 // ---------- lock / unlock ----------
-async function unlock() {
-  const pass = $('#pass').value;
+async function unlock(pass = $('#pass').value) {
   if (!pass) throw new Error('請輸入通關密語');
   const c = cfg();
   S.head = useApi(c) ? await getHead(c) : null;
@@ -557,6 +565,7 @@ async function unlock() {
   await decryptTitles();
   $('#lockState').textContent = useApi(c) ? '🔓 已解鎖' : '🔓 已解鎖（唯讀）';
   $('#rekeyBox').hidden = false;
+  bioUI();
   renderList();
   let last = '';
   try { last = localStorage.getItem('pax.tab'); } catch {}
@@ -568,6 +577,7 @@ function lock(reason) {
   ['#dTitle', '#dDesc', '#dEnv', '#dCode'].forEach(s => $(s).textContent = '');
   ['#rkOld', '#rkNew', '#rkNew2', '#impToken', '#impPass', '#dImpPass'].forEach(s => $(s).value = '');
   $('#rekeyBox').hidden = true; $('#rekeyBox').open = false;
+  $('#bioPass').value = ''; $('#bioBox').open = false; bioUI();
   $('#lockState').textContent = '🔒 未解鎖';
   show('unlock');
   if (reason) toast(reason);
@@ -618,6 +628,100 @@ async function rekey() {
   $('#rekeyBox').open = false;
   renderList();
   toast('✅ 已更換密語並提交', 4000);
+  // 這台裝置有開 Face ID → 存的是舊密語，再跳一次 Face ID 換成新密語；失敗就停用
+  if (bioGet()) {
+    try { await bioStore(bioGet(), n1); toast('✅ 已更換密語，Face ID 也已更新', 4000); }
+    catch { bioClear(); toast('已更換密語；Face ID 解鎖已停用，請重新啟用', 5000); }
+  }
+}
+
+// ---------- Face ID 解鎖 ----------
+// WebAuthn PRF：通行密鑰要通過 Face ID 才會吐出固定的 32 bytes 秘密，用它（HKDF → AES-GCM）加密密語存在 localStorage。
+// 資料金鑰仍只從密語推導；拿到 localStorage 也解不開，密語永遠可以手動輸入（其他裝置更換密語後會自動停用）。
+const BIO_KEY = 'pax.bio';
+let bioAvail = false;
+function bioGet() { try { return JSON.parse(localStorage.getItem(BIO_KEY) || 'null'); } catch { return null; } }
+function bioClear() { try { localStorage.removeItem(BIO_KEY); } catch {} bioUI(); }
+function bioUI() {
+  const on = bioAvail && !!bioGet();
+  $('#btnBio').hidden = !on || !!S.key;
+  $('#bioBox').hidden = !bioAvail || !S.key;
+  $('#bioSum').textContent = on ? '🙂 Face ID 解鎖（已啟用）' : '🙂 Face ID 解鎖';
+  $('#bioOff').hidden = on; $('#bioOn').hidden = !on;
+}
+async function bioDetect() {
+  try { bioAvail = !!(window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()); }
+  catch { bioAvail = false; }
+  bioUI();
+}
+const NO_PRF = '這個瀏覽器不支援 Face ID 解鎖（需 iOS 18 / Chrome 132 以上）';
+async function bioKey(b) {
+  const a = await navigator.credentials.get({ publicKey: {
+    challenge: crypto.getRandomValues(new Uint8Array(32)),
+    allowCredentials: [{ type: 'public-key', id: fromB64(b.id), transports: ['internal', 'hybrid'] }],
+    userVerification: 'required',
+    timeout: 60000,
+    extensions: { prf: { eval: { first: fromB64(b.salt) } } }
+  } });
+  const r = a && a.getClientExtensionResults().prf;
+  if (!r || !r.results || !r.results.first) throw new Error(NO_PRF);
+  const base = await crypto.subtle.importKey('raw', r.results.first, 'HKDF', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: te.encode('issue-relay bio v1') }, base,
+    { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function bioStore(b, pass) {
+  const box = await seal({ pass }, await bioKey(b));
+  localStorage.setItem(BIO_KEY, JSON.stringify({ id: b.id, salt: b.salt, box }));
+  bioUI();
+}
+function bioErr(e) {
+  if (e && e.name === 'NotAllowedError') return new Error('Face ID 已取消或未通過，可改輸入密語');
+  if (e && e.name === 'InvalidStateError') { bioClear(); return new Error('通行密鑰已被刪除，Face ID 解鎖已停用'); }
+  return e;
+}
+async function enableBio() {
+  const pass = $('#bioPass').value;
+  if (!pass) throw new Error('請輸入目前密語');
+  await keyFor(pass, S.idx);
+  let cred;
+  try {
+    cred = await navigator.credentials.create({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rp: { name: '問題分析交換站' },
+      user: { id: crypto.getRandomValues(new Uint8Array(16)), name: 'issue-relay', displayName: '問題分析交換站' },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
+      attestation: 'none',
+      timeout: 60000,
+      extensions: { prf: {} }
+    } });
+  } catch (e) { throw bioErr(e); }
+  if (!cred) return;
+  const ext = cred.getClientExtensionResults().prf;
+  if (!ext || ext.enabled === false) throw new Error(NO_PRF);
+  // 建立後再跳一次 Face ID 取 PRF 秘密（iOS 建立當下不一定回傳）
+  try { await bioStore({ id: toB64(cred.rawId), salt: toB64(crypto.getRandomValues(new Uint8Array(32))) }, pass); }
+  catch (e) { throw bioErr(e); }
+  $('#bioPass').value = ''; $('#bioBox').open = false;
+  toast('✅ 已啟用 Face ID 解鎖（只限這台裝置）', 3000);
+}
+async function bioUnlock() {
+  const b = bioGet();
+  if (!b) return;
+  let pass;
+  try { pass = (await unseal(b.box, await bioKey(b))).pass; }
+  catch (e) { throw bioErr(e); }
+  try { await unlock(pass); }
+  catch (e) {
+    if (e.message !== '密語錯誤') throw e;
+    bioClear();
+    throw new Error('密語已在其他裝置更換，Face ID 解鎖已停用，請輸入新密語後重新啟用');
+  }
+}
+function disableBio() {
+  if (!confirm('停用這台裝置的 Face ID 解鎖？之後改回輸入密語。')) return;
+  bioClear();
+  toast('已停用（iPhone 可到「設定 → 密碼」刪掉這把通行密鑰）', 4000);
 }
 
 // ---------- views ----------
@@ -1045,7 +1149,11 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && S.key && !$('#tab-board').hidden) syncBoard(true).catch(() => {});
 });
 setKind('msg');
-$('#btnUnlock').onclick = e => busy(e.target, unlock);
+// 有開 Face ID 且密語欄空白 → 按「解鎖並載入」也走 Face ID（同股市儀表板）
+$('#btnUnlock').onclick = e => busy(e.target, () => !$('#pass').value && bioAvail && bioGet() ? bioUnlock() : unlock());
+$('#btnBio').onclick = e => busy(e.target, bioUnlock);
+$('#btnBioOn').onclick = e => busy(e.target, enableBio);
+$('#btnBioOff').onclick = disableBio;
 $('#pass').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnUnlock').click(); });
 $('#btnLock').onclick = () => lock('已上鎖');
 $('#btnSaveCfg').onclick = saveCfg;
@@ -1069,6 +1177,7 @@ $('#btnAddEntry').onclick = e => busy(e.target, addEntry);
 $('#btnDone').onclick = e => busy(e.target, setDone);
 $('#btnDelete').onclick = e => busy(e.target, delCase);
 fillCfg();
+bioDetect();
 if (!window.isSecureContext || !crypto.subtle) toast('需在 HTTPS 下使用（GitHub Pages 預設即是）', 5000);
 </script>
 </body>
