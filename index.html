@@ -102,6 +102,13 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px;margin-top:12px
 .msg.done .txt{opacity:.7}
 .msg .txt{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px}
 .msg .txt a{color:var(--accent)}
+@media (pointer:fine){.msg .txt{cursor:copy}}
+.msg.new{box-shadow:0 0 0 2px var(--accent) inset}
+.newb{font-size:11px;font-weight:700;color:#fff;background:var(--danger);border-radius:99px;padding:0 6px}
+.edited{font-size:12px;color:var(--muted)}
+nav button{position:relative}
+.nb{position:absolute;top:2px;right:4px;min-width:18px;font-size:11px;font-style:normal;font-weight:700;line-height:18px;color:#fff;background:var(--danger);border-radius:99px;padding:0 5px}
+.day-h.older b{color:var(--r-note)}
 .acts{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;margin-top:6px}
 .acts button{white-space:nowrap}
 .replies{margin:8px 0 2px 6px;padding-left:10px;border-left:2px solid var(--line)}
@@ -126,7 +133,7 @@ mark{background:#ffe58a;color:#1d2330;border-radius:3px;padding:0 1px}
 <header><h1>🔐 問題分析交換站</h1><span class="hdr-r"><a href="tool.html">🔐 小工具</a><span id="lockState">🔒 未解鎖</span></span></header>
 <nav>
   <button data-tab="unlock" class="on"><i>🔑</i>解鎖</button>
-  <button data-tab="board"><i>💬</i>留言</button>
+  <button data-tab="board"><i>💬</i>留言<em class="nb" id="bBadge" hidden></em></button>
   <button data-tab="list"><i>📋</i>案件</button>
   <button data-tab="search"><i>🔎</i>查詢</button>
   <button data-tab="new"><i>➕</i>新增</button>
@@ -137,6 +144,14 @@ mark{background:#ffe58a;color:#1d2330;border-radius:3px;padding:0 1px}
   <h2>解鎖資料庫</h2>
   <label for="pass">通關密語（不會儲存，也不會上傳）</label>
   <input id="pass" type="password" autocomplete="off" placeholder="建議 16 字以上">
+  <label for="remember">記住這台裝置（免再輸入）</label>
+  <select id="remember">
+    <option value="0">不記住：每次都要解鎖，閒置 10 分鐘自動上鎖</option>
+    <option value="8">記住 8 小時</option>
+    <option value="168">記住 7 天</option>
+    <option value="720">記住 30 天</option>
+  </select>
+  <p class="hint" id="remState"></p>
   <div class="row"><button class="primary" id="btnBio" hidden>🙂 Face ID 解鎖</button><button class="primary" id="btnUnlock">解鎖並載入</button><button id="btnLock">上鎖</button></div>
   <p class="hint">資料以 AES-256-GCM 加密，金鑰由 PBKDF2-SHA256（600,000 次）從密語推導。閒置 10 分鐘自動上鎖。</p>
   <p class="hint">🔐 加密／解密小工具：<a href="tool.html">線上開啟</a>・<a href="tool.html" download="加密解密小工具.html">下載到電腦</a>（下載後用 Chrome / Edge 開啟，可離線使用）</p>
@@ -151,6 +166,11 @@ mark{background:#ffe58a;color:#1d2330;border-radius:3px;padding:0 1px}
     <label><input id="cfgRemember" type="checkbox" style="width:auto"> 在此裝置記住 token（否則關閉分頁即清除）</label>
     <div class="row"><button id="btnSaveCfg">儲存設定</button><button id="btnClearCfg" class="danger">清除 token</button></div>
     <p class="hint">未設定 token 時只能讀取，無法存檔。</p>
+  </details>
+  <details>
+    <summary>📱 這台裝置的名稱</summary>
+    <label>顯示在留言旁，用來分辨是哪台裝置傳的</label><input id="devName" placeholder="例：公司電腦、iPhone">
+    <div class="row"><button id="btnSaveDev">儲存</button></div>
   </details>
   <details id="bioBox" hidden>
     <summary id="bioSum">🙂 Face ID 解鎖</summary>
@@ -182,7 +202,7 @@ mark{background:#ffe58a;color:#1d2330;border-radius:3px;padding:0 1px}
     <button id="bPaste">📥 從剪貼簿貼上</button>
     <button class="primary" id="bSend">🔐 加密送出</button>
   </div>
-  <p class="hint">💬 訊息：傳到另一台裝置；❓ 問題：記錄留存，之後可在 🔎 查詢 找回。Ctrl / ⌘ + Enter 送出，切回此頁會自動同步。</p>
+  <p class="hint">💬 訊息：傳到另一台裝置；❓ 問題：記錄留存，之後可在 🔎 查詢 找回。Ctrl / ⌘ + Enter 送出。每 30 秒自動檢查新留言；點留言內容即可複製。</p>
   <div class="bar">
     <input id="bFilter" placeholder="🔎 篩選已載入的留言">
     <select id="bShow"><option value="">全部</option><option value="msg">💬 訊息</option><option value="issue">❓ 問題</option><option value="open">❓ 未解決</option></select>
@@ -299,7 +319,9 @@ const PLACEHOLDER = {
 const canShare = !!navigator.share && matchMedia('(pointer:coarse)').matches;
 // idx：index.json（案件清單，標題加密）；cases：已載入的案件檔；head：目前資料對應的 commit
 // notes：已載入的留言日檔（null 代表遠端沒有該檔）；notePlain：解密後的留言；bDays：留言板顯示的天數
-const blank = () => ({ idx: null, head: null, key: null, cases: {}, titles: {}, plain: {}, current: null, notes: {}, notePlain: {}, bDays: 7, bGen: 0 });
+// saving：存檔中（輪詢暫停）；remember：記住此裝置的到期時間；markSince：留言板「新」標記的起算時間
+const blank = () => ({ idx: null, head: null, key: null, cases: {}, titles: {}, plain: {}, current: null, notes: {}, notePlain: {}, bDays: 7, bGen: 0,
+  saving: 0, remember: 0, markSince: 0, trees: {} });
 let S = blank();
 
 // ---------- utils ----------
@@ -454,11 +476,11 @@ async function gh(c, method, path, body) {
 }
 const getHead = async c => (await gh(c, 'GET', `/git/ref/heads/${c.branch}`)).object.sha;
 // 有 token 時讀取指定 commit 的檔案，確保 index 與案件檔一致；沒有 token 時從 Pages 讀（唯讀）
-async function readJson(path) {
+async function readJson(path, ref = S.head) {
   const c = cfg();
   if (useApi(c)) {
     try {
-      const j = await gh(c, 'GET', `/contents/${path}?ref=${S.head || c.branch}`);
+      const j = await gh(c, 'GET', `/contents/${path}?ref=${ref || c.branch}`);
       if (!j.content) throw new Error('檔案過大：' + path);
       return JSON.parse(td.decode(fromB64(j.content.replace(/\n/g, ''))));
     } catch (e) { if (e.status === 404) return null; throw e; }
@@ -491,6 +513,10 @@ function needApi() {
 // mutate(idx, cs, ns) 修改 index、ids 對應的案件檔與 days 對應的留言日檔（設為 null 代表刪除）；遠端有更新時重新載入後再套用一次
 async function save(msg, ids, mutate, days = []) {
   const c = needApi();
+  S.saving++;
+  try { await saveInner(c, msg, ids, mutate, days); } finally { S.saving--; }
+}
+async function saveInner(c, msg, ids, mutate, days) {
   for (let attempt = 0; ; attempt++) {
     const idx = clone(S.idx), cs = {}, ns = {};
     for (const id of ids) cs[id] = clone(S.cases[id]);
@@ -502,7 +528,13 @@ async function save(msg, ids, mutate, days = []) {
     let head;
     try { head = await commitFiles(c, msg, files, S.head); }
     catch (e) {
-      if (attempt === 0 && (e.status === 409 || e.status === 422)) { await resync(ids, days); continue; }
+      if (attempt === 0 && (e.status === 409 || e.status === 422)) {
+        // 只重新載入遠端有變動的檔案，其他已解密的內容保留
+        await refresh(true);
+        for (const id of ids) if (!(id in S.cases)) { const f = await readJson(casePath(c, id)); if (f) S.cases[id] = f; }
+        for (const d of days) await loadDay(d);
+        continue;
+      }
       throw e;
     }
     S.head = head; S.idx = idx;
@@ -528,6 +560,66 @@ async function resync(ids = [], days = []) {
   for (const id of ids) { const f = await readJson(casePath(c, id)); if (f) S.cases[id] = f; }
   for (const d of days) await loadDay(d);
   await decryptTitles();
+}
+
+// 增量同步：比對兩個 commit 的檔案樹，只丟掉有變動的快取（不影響其他已解密內容）。有變動回傳 true
+async function treeOf(c, sha) {
+  if (!S.trees[sha]) {
+    const t = await gh(c, 'GET', `/git/trees/${sha}?recursive=1`);
+    if (t.truncated) throw new Error('檔案過多，無法增量同步');
+    S.trees[sha] = new Map(t.tree.filter(x => x.type === 'blob').map(x => [x.path, x.sha]));
+  }
+  return S.trees[sha];
+}
+async function refresh(force) {
+  const c = cfg();
+  if (!useApi(c) || !S.head) { await resync(); return true; }
+  const h = await getHead(c);
+  if (h === S.head) return false;
+  let a, b;
+  try { a = await treeOf(c, S.head); b = await treeOf(c, h); }
+  catch (e) { if (force) { await resync(); return true; } throw e; }
+  const idx = await readJson(idxPath(c), h);
+  if (!idx) throw new Error('遠端找不到資料');
+  if (idx.kdf.salt !== S.idx.kdf.salt) { forgetDevice(); lock('遠端資料庫已更換密語，請用新密語重新解鎖'); throw new Error('已上鎖'); }
+  const changed = p => a.get(p) !== b.get(p);
+  for (const id of Object.keys(S.cases)) if (changed(casePath(c, id))) { delete S.cases[id]; delete S.plain[id]; }
+  for (const id of Object.keys(S.plain)) if (!S.cases[id]) delete S.plain[id];
+  for (const d of Object.keys(S.notes)) if (changed(notePath(c, d))) { delete S.notes[d]; delete S.notePlain[d]; }
+  S.head = h; S.idx = idx; S.trees = { [h]: b };
+  await decryptTitles();
+  return true;
+}
+// 同步後重畫目前所在的頁面
+async function afterRefresh() {
+  const vis = t => !$('#tab-' + t).hidden, prevSeen = seenAt();
+  if (vis('board')) {
+    await renderBoard();
+    const n = await countNew(prevSeen);
+    if (n) toast(`💬 收到 ${n} 則新留言`, 3000);
+    return;
+  }
+  if (vis('list')) renderList();
+  else if (vis('search')) await ensureSearch();
+  else if (vis('detail') && S.current && !S.plain[S.current]) {
+    if (!entryOf(S.idx, S.current)) { show('list'); renderList(); toast('這個案件已被其他裝置刪除', 3000); }
+    else {
+      const keep = $('#dEntryIn').value, role = $('#dRole').value;
+      await loadCase(S.current); renderCase();
+      $('#dEntryIn').value = keep; setRole(role); checkEntryIR();
+      toast('案件已被其他裝置更新', 2500);
+    }
+  }
+  await scanNew();
+}
+// 每 30 秒（畫面在前景時）檢查遠端有沒有新 commit
+const POLL_MS = 30000;
+let polling = null;
+function poll() {
+  if (!S.key || S.saving || document.visibilityState !== 'visible' || !useApi(cfg())) return;
+  if (S.remember && S.remember < Date.now()) { forgetDevice(); lock('「記住這台裝置」已到期，請重新解鎖'); return; }
+  if (!polling) polling = refresh().then(ch => ch && afterRefresh()).catch(e => console.warn(e)).finally(() => { polling = null; });
+  return polling;
 }
 
 // ---------- 資料 ----------
@@ -577,6 +669,65 @@ async function migrateLegacy(legacy) {
   return idx;
 }
 
+// ---------- 這台裝置：名稱、識別碼、記住解鎖 ----------
+function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function lsSet(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} }
+function devId() { let id = lsGet('pax.devid'); if (!id) { id = toB64(crypto.getRandomValues(new Uint8Array(9))); lsSet('pax.devid', id); } return id; }
+const isMobile = () => /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const device = () => lsGet('pax.devname') || (isMobile() ? '📱 手機' : '💻 電腦');
+// 記住解鎖：把「不可匯出」的 AES 金鑰物件存進 IndexedDB（拿不出金鑰本體，只能在這個網站內使用），到期或按「上鎖」即刪除
+const KS = {
+  db() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open('pax', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('kv');
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+  },
+  async run(mode, fn) {
+    const db = await KS.db();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('kv', mode), r = fn(tx.objectStore('kv'));
+      tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error);
+    });
+  },
+  get: k => KS.run('readonly', st => st.get(k)),
+  set: (k, v) => KS.run('readwrite', st => st.put(v, k)),
+  del: k => KS.run('readwrite', st => st.delete(k))
+};
+const repoId = () => { const c = cfg(); return `${c.owner}/${c.repo}/${c.branch}/${c.dir}`; };
+async function rememberDevice(hours) {
+  if (!hours) return;
+  const exp = Date.now() + hours * 3600e3;
+  await KS.set('key', { key: S.key, salt: S.idx.kdf.salt, exp, repo: repoId() });
+  S.remember = exp;
+}
+function forgetDevice() { KS.del('key').catch(() => {}); if (S) S.remember = 0; remUI(); }
+function remUI() {
+  $('#remState').textContent = S.remember
+    ? `✅ 這台裝置記住到 ${fmt(S.remember)}，期間不會自動上鎖。按「上鎖」會立即取消。`
+    : '只在自己的手機 / 電腦使用；拿到這台裝置的人在期限內可直接看到內容。';
+}
+async function autoUnlock() {
+  let r;
+  try { r = await KS.get('key'); } catch { return; }
+  if (!r || S.key) return;
+  if (r.exp < Date.now() || r.repo !== repoId()) { forgetDevice(); return; }
+  $('#lockState').textContent = '⏳ 自動解鎖中…';
+  try {
+    const c = cfg();
+    S.head = useApi(c) ? await getHead(c) : null;
+    const idx = await readJson(idxPath(c));
+    if (!idx || idx.kdf.salt !== r.salt) { forgetDevice(); throw new Error('密語已更換，請重新輸入'); }
+    try { await unseal(idx.check, r.key); } catch { forgetDevice(); throw new Error('記住的金鑰無效，請重新輸入密語'); }
+    S.key = r.key; S.remember = r.exp;
+    await enter(idx);
+  } catch (e) {
+    S = blank(); $('#lockState').textContent = '🔒 未解鎖'; remUI();
+    toast('❌ ' + e.message, 4000);
+  }
+}
+
 // ---------- lock / unlock ----------
 async function unlock(pass = $('#pass').value) {
   if (!pass) throw new Error('請輸入通關密語');
@@ -601,8 +752,19 @@ async function unlock(pass = $('#pass').value) {
       idx = { version: 2, kdf: { alg: 'PBKDF2-SHA256', iter: ITER, salt: toB64(salt) }, check: await seal({ ok: true }), cases: [] };
     }
   }
-  S.idx = idx; S.cases = {}; S.plain = {};
   $('#pass').value = '';
+  await enter(idx);
+  const hours = +$('#remember').value;
+  if (hours) {
+    try { await rememberDevice(hours); toast(`✅ 已解鎖，這台裝置記住 ${hours >= 24 ? hours / 24 + ' 天' : hours + ' 小時'}`, 3000); }
+    catch { toast('這個瀏覽器無法記住解鎖（可能是無痕模式）', 4000); }
+    remUI(); bumpIdle();
+  }
+}
+// 解鎖成功（輸入密語、Face ID 或記住的金鑰）後共用的流程
+async function enter(idx) {
+  const c = cfg();
+  S.idx = idx; S.cases = {}; S.plain = {};
   await decryptTitles();
   $('#lockState').textContent = useApi(c) ? '🔓 已解鎖' : '🔓 已解鎖（唯讀）';
   $('#rekeyBox').hidden = false;
@@ -611,20 +773,22 @@ async function unlock(pass = $('#pass').value) {
   let last = '';
   try { last = localStorage.getItem('pax.tab'); } catch {}
   if (last === 'board') openBoard(); else show('list');
+  remUI(); bumpIdle(); scanNew().catch(() => {});
 }
 function lock(reason) {
-  S = blank();
+  S = blank(); editDraft = {}; badge(0);
   $('#caseList').textContent = ''; $('#bList').textContent = ''; $('#bIn').value = ''; replyDraft = {}; $('#sResults').textContent = ''; $('#sQ').value = ''; $('#sInfo').textContent = ''; $('#bFilter').value = ''; $('#dThread').textContent = ''; $('#dSummary').textContent = ''; $('#dEntryIn').value = '';
   ['#dTitle', '#dDesc', '#dEnv', '#dCode'].forEach(s => $(s).textContent = '');
   ['#rkOld', '#rkNew', '#rkNew2', '#impToken', '#impPass', '#dImpPass'].forEach(s => $(s).value = '');
   $('#rekeyBox').hidden = true; $('#rekeyBox').open = false;
   $('#bioPass').value = ''; $('#bioBox').open = false; bioUI();
   $('#lockState').textContent = '🔒 未解鎖';
+  remUI();
   show('unlock');
   if (reason) toast(reason);
 }
 let idleTimer;
-function bumpIdle() { clearTimeout(idleTimer); if (S.key) idleTimer = setTimeout(() => lock('閒置過久，已自動上鎖'), IDLE_MS); }
+function bumpIdle() { clearTimeout(idleTimer); if (S.key && !S.remember) idleTimer = setTimeout(() => lock('閒置過久，已自動上鎖'), IDLE_MS); }
 ['click', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, bumpIdle, { passive: true }));
 
 // ---------- 更換密語 ----------
@@ -663,7 +827,8 @@ async function rekey() {
   files[idxPath(c)] = json(out);
   try { S.head = await commitFiles(c, 'rekey', files, S.head); }
   catch (e) { if (e.status === 409 || e.status === 422) throw new Error('遠端資料剛被更新，請再按一次'); throw e; }
-  S.idx = out; S.key = newKey; S.cases = {}; S.plain = {}; S.notes = {}; S.notePlain = {};
+  S.idx = out; S.key = newKey; S.cases = {}; S.plain = {}; S.notes = {}; S.notePlain = {}; S.trees = {};
+  if (S.remember) await KS.set('key', { key: newKey, salt: out.kdf.salt, exp: S.remember, repo: repoId() }).catch(forgetDevice);
   await decryptTitles();
   ['#rkOld', '#rkNew', '#rkNew2'].forEach(s => $(s).value = '');
   $('#rekeyBox').open = false;
@@ -861,11 +1026,63 @@ const NOTE_PH = {
 let bKind = 'msg';
 // 回覆框：留言 id → 草稿（重新整理畫面時保留，避免切 App 回來後打到一半的字消失）
 let replyDraft = {};
+// 編輯中的留言：id → 草稿
+let editDraft = {};
+// 「新」：別台裝置在 since 之後新增或編輯的留言 / 回覆
+const isMine = x => x.dev ? x.dev === devId() : x.from === device();
+const isNew = (x, since) => !!since && (x.edited || x.at) > since && !isMine(x);
+const seenAt = () => { const v = +lsGet('pax.seen'); if (v) return v; const n = Date.now(); lsSet('pax.seen', n); return n; };
+function badge(n) {
+  $('#bBadge').hidden = !n; $('#bBadge').textContent = n > 99 ? '99+' : n;
+  document.title = (n ? `(${n}) ` : '') + '問題分析交換站';
+}
+// 找出別台裝置的新留言：更新未讀數；比上次多時跳提示
+let lastNew = 0;
+async function countNew(since) {
+  const recent = (S.idx.days || []).filter(e => e.updated > since);
+  await Promise.all(recent.map(e => loadDay(e.d)));
+  let n = 0;
+  for (const e of recent) for (const x of S.notePlain[e.d] || []) if (isNew(x, since)) n++;
+  return n;
+}
+// 不在留言板時：更新分頁上的未讀數，比上次多就跳提示
+async function scanNew() {
+  if (!S.key || !$('#tab-board').hidden) return;
+  const n = await countNew(seenAt());
+  if (n > lastNew) toast(`💬 收到 ${n - lastNew} 則新留言`, 3000);
+  lastNew = n; badge(n);
+}
+// 點留言內容就複製（點連結、或正在選取文字時不算）
+function tapCopy(el, text) {
+  el.title = '點一下複製';
+  el.onclick = e => { if (e.target.closest('a') || String(getSelection())) return; copy(text); };
+}
+const NOTE_FIELDS = ['kind', 're', 'text', 'at', 'from', 'dev', 'done', 'edited'];
+const pick = x => Object.fromEntries(NOTE_FIELDS.filter(k => x[k] !== undefined).map(k => [k, x[k]]));
+function editForm(d, x, body) {
+  const id = nid(x), f = document.createElement('div'); f.className = 'rform';
+  const ta = document.createElement('textarea'); ta.value = id in editDraft ? editDraft[id] : x.text;
+  ta.oninput = () => { editDraft[id] = ta.value; };
+  const row = document.createElement('div'); row.className = 'row end';
+  const cancel = document.createElement('button'); cancel.textContent = '取消';
+  cancel.onclick = () => { delete editDraft[id]; f.remove(); body.hidden = false; };
+  const go = document.createElement('button'); go.className = 'primary'; go.textContent = '🔐 儲存修改';
+  go.onclick = () => busy(go, () => editNote(d, x, ta.value));
+  ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); go.click(); } });
+  row.append(cancel, go); f.append(ta, row);
+  body.hidden = true;
+  return f;
+}
+function startEdit(d, x, el, body) {
+  const id = nid(x);
+  if (el.querySelector(':scope > .rform.edit')) return;
+  editDraft[id] = id in editDraft ? editDraft[id] : x.text;
+  const f = editForm(d, x, body); f.classList.add('edit'); body.after(f); f.querySelector('textarea').focus();
+}
 const nid = x => x.id || x.iv;
 const pad = n => String(n).padStart(2, '0');
 const dayKey = (t = new Date()) => `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
 const hm = ts => { const t = new Date(ts); return `${pad(t.getHours())}:${pad(t.getMinutes())}`; };
-const device = () => matchMedia('(pointer:coarse)').matches ? '📱 手機' : '💻 電腦';
 const dayOf = (idx, d) => (idx.days || []).find(x => x.d === d);
 function dayLabel(d) {
   const y = new Date(); y.setDate(y.getDate() - 1);
@@ -902,12 +1119,16 @@ function replyEl(d, r) {
   const h = document.createElement('div'); h.className = 'entry-h';
   const who = document.createElement('b'); who.textContent = `↳ ${hm(r.at)}・${r.from || ''}`;
   const sp = document.createElement('span');
-  const cp = document.createElement('button'); cp.className = 'sm'; cp.textContent = '複製'; cp.onclick = () => copy(r.text);
+  if (r.edited) { const ed = document.createElement('i'); ed.className = 'edited'; ed.textContent = '（已編輯）'; sp.append(ed); }
+  if (isNew(r, S.markSince)) { const nb = document.createElement('i'); nb.className = 'newb'; nb.textContent = '新'; sp.append(' ', nb); }
+  const body = document.createElement('div'); body.className = 'txt'; linkify(r.text, body); tapCopy(body, r.text);
+  const ed = document.createElement('button'); ed.className = 'sm'; ed.textContent = '✏️'; ed.title = '編輯';
+  ed.onclick = () => startEdit(d, r, el, body);
   const del = document.createElement('button'); del.className = 'sm danger'; del.textContent = '刪除';
   del.onclick = ev => { if (confirm('刪除這則回覆？')) busy(ev.target, () => delNote(d, r)); };
-  h.append(who, sp, cp, del);
-  const body = document.createElement('div'); body.className = 'txt'; linkify(r.text, body);
+  h.append(who, sp, ed, del);
   el.append(h, body);
+  if (nid(r) in editDraft) startEdit(d, r, el, body);
   return el;
 }
 function replyForm(d, x) {
@@ -924,14 +1145,18 @@ function replyForm(d, x) {
   return f;
 }
 function noteEl(d, x, rs = []) {
-  const el = document.createElement('div'); el.className = 'msg k-' + x.kind + (x.done ? ' done' : '');
+  const el = document.createElement('div'); el.className = 'msg k-' + x.kind + (x.done ? ' done' : '') + (isNew(x, S.markSince) ? ' new' : '');
   const h = document.createElement('div'); h.className = 'entry-h';
   const who = document.createElement('b'); who.textContent = x.kind === 'issue' && x.done ? '✅ 已解決' : (NOTE_KIND[x.kind] || x.kind);
   const when = document.createElement('span'); when.textContent = `${hm(x.at)}・${x.from || ''}`;
   const btn = (label, fn, cls = 'sm') => { const b = document.createElement('button'); b.className = cls; b.textContent = label; b.onclick = fn; return b; };
   h.append(who, when);
+  if (x.edited) { const ed = document.createElement('i'); ed.className = 'edited'; ed.textContent = '（已編輯）'; when.append(' ', ed); }
+  if (isNew(x, S.markSince)) { const nb = document.createElement('i'); nb.className = 'newb'; nb.textContent = '新'; h.append(nb); }
+  const body = document.createElement('div'); body.className = 'txt'; linkify(x.text, body); tapCopy(body, x.text);
   const acts = document.createElement('div'); acts.className = 'acts';
   acts.append(btn('複製', () => copy(x.text)));
+  acts.append(btn('✏️ 編輯', () => startEdit(d, x, el, body)));
   acts.append(btn('↩ 回覆', () => {
     const id = nid(x);
     if (el.querySelector('.rform')) return el.querySelector('.rform textarea').focus();
@@ -943,8 +1168,8 @@ function noteEl(d, x, rs = []) {
     acts.append(btn('➕ 轉案件', () => noteToCase(x)));
   }
   acts.append(btn('刪除', ev => { if (confirm(rs.length ? `刪除這則留言與 ${rs.length} 則回覆？` : '刪除這則留言？')) busy(ev.target, () => delNote(d, x)); }, 'sm danger'));
-  const body = document.createElement('div'); body.className = 'txt'; linkify(x.text, body);
   el.append(h, body, acts);
+  if (nid(x) in editDraft) startEdit(d, x, el, body);
   if (rs.length) { const rb = document.createElement('div'); rb.className = 'replies'; rs.forEach(r => rb.append(replyEl(d, r))); el.append(rb); }
   if (nid(x) in replyDraft) el.append(replyForm(d, x));
   return el;
@@ -954,15 +1179,33 @@ async function renderBoard() {
   const gen = ++S.bGen;
   const days = [...(S.idx.days || [])].sort((a, b) => a.d < b.d ? 1 : -1);
   const shown = days.slice(0, S.bDays);
-  await Promise.all(shown.map(e => loadDay(e.d)));
+  // 顯示範圍外、但最近 7 天有新回覆的日期也載入，把那些舊留言放在最上面
+  const cutoff = Date.now() - 7 * 864e5, extra = days.slice(S.bDays).filter(e => e.updated > cutoff);
+  await Promise.all([...shown, ...extra].map(e => loadDay(e.d)));
   if (gen !== S.bGen || !S.key) return;
   const q = $('#bFilter').value.trim().toLowerCase(), only = $('#bShow').value;
+  const ok = (x, rs) => (!only || x.kind === only || (only === 'open' && x.kind === 'issue' && !x.done))
+    && (!q || [x, ...(rs[nid(x)] || [])].some(y => y.text.toLowerCase().includes(q)));
   const box = $('#bList'); box.textContent = '';
   let hits = 0;
+  const older = [];
+  for (const e of extra) {
+    const { top, rs } = thread(S.notePlain[e.d] || []);
+    for (const x of top) if ((rs[nid(x)] || []).some(r => r.at > cutoff) && ok(x, rs)) older.push([e.d, x, rs[nid(x)]]);
+  }
+  if (older.length) {
+    hits += older.length;
+    const g = document.createElement('div'); g.className = 'day';
+    const h = document.createElement('div'); h.className = 'day-h older';
+    const tb = document.createElement('b'); tb.textContent = '↩ 較早留言的近期回覆'; h.append(tb); g.append(h);
+    for (const [d, x, r] of older.sort((a, b) => Math.max(...b[2].map(y => y.at)) - Math.max(...a[2].map(y => y.at)))) {
+      const w = document.createElement('div'); w.className = 'hint'; w.textContent = dayLabel(d); g.append(w, noteEl(d, x, r));
+    }
+    box.append(g);
+  }
   for (const e of shown) {
     const all = S.notePlain[e.d] || [], { top, rs } = thread(all);
-    const m = top.filter(x => (!only || x.kind === only || (only === 'open' && x.kind === 'issue' && !x.done))
-      && (!q || [x, ...(rs[nid(x)] || [])].some(y => y.text.toLowerCase().includes(q))));
+    const m = top.filter(x => ok(x, rs));
     if (!m.length) continue;
     hits += m.length;
     const g = document.createElement('div'); g.className = 'day';
@@ -981,20 +1224,20 @@ async function renderBoard() {
   if (!hits) box.innerHTML = `<p class="hint">${days.length ? '已載入的日期中沒有符合的留言。' : '還沒有留言。'}</p>`;
   else if (q || only) box.insertAdjacentHTML('afterbegin', `<p class="hint">只在最近 ${shown.length} 天中篩選；要找更早的請按下方「載入更早」。</p>`);
   $('#bMore').hidden = days.length <= S.bDays;
-  // 在查詢頁展開的留言按了回覆 / 解決 / 刪除後，查詢結果跟著更新
-  if (!$('#tab-search').hidden) runSearch();
+  if (!$('#tab-board').hidden) { lsSet('pax.seen', Date.now()); lastNew = 0; badge(0); }
+  // 在查詢頁展開的留言按了回覆 / 解決 / 刪除後，查詢結果跟著更新（缺的資料會補載）
+  if (!$('#tab-search').hidden) ensureSearch().catch(e => toast('❌ ' + e.message, 4000));
 }
-// 有新 commit 才重新載入；quiet 時不顯示提示
-async function syncBoard(quiet) {
-  const c = cfg();
-  if (quiet && useApi(c) && S.head && await getHead(c) === S.head) return renderBoard();
+// 手動同步：完整重新讀取
+async function syncBoard() {
   await resync();
   await renderBoard();
-  if (!quiet) toast('已同步');
+  toast('已同步');
 }
 function openBoard() {
+  S.markSince = seenAt();
   show('board');
-  syncBoard(true).catch(e => toast('❌ ' + e.message, 4000));
+  renderBoard().then(poll).catch(e => toast('❌ ' + e.message, 4000));
 }
 async function postNote() {
   needApi();
@@ -1002,7 +1245,7 @@ async function postNote() {
   if (!text) throw new Error('請先輸入或貼上內容');
   if (SECRET_RE.test(text) && !confirm('偵測到疑似密碼 / 金鑰 / 連線字串，確定仍要儲存？')) return;
   const d = dayKey(), now = Date.now();
-  const box = await seal({ kind, text, at: now, from: device() });
+  const box = await seal({ kind, text, at: now, from: device(), dev: devId() });
   await loadDay(d);
   await save(`note ${d}`, [], (idx, cs, ns) => {
     const f = ns[d] || { d, m: [] };
@@ -1014,14 +1257,31 @@ async function postNote() {
   $('#bIn').value = '';
   await renderBoard();
 }
-async function toggleNote(d, x) {
-  // 重新加密後 iv 會變，用 id 保留原本的識別，回覆才接得上
-  const box = await seal({ id: nid(x), kind: x.kind, text: x.text, at: x.at, from: x.from, done: !x.done });
-  await save(`note ${x.done ? 'reopen' : 'resolve'} ${d}`, [], (idx, cs, ns) => {
-    const f = ns[d]; if (!f) return;
-    const i = f.m.findIndex(b => b.iv === x.iv);
-    if (i >= 0) f.m[i] = box;
-  }, [d]);
+// 以新內容取代一則留言 / 回覆。重新加密後 iv 會變，用 id 保留原本的識別，回覆才接得上；
+// 若另一台裝置剛改過或刪掉，停止並重畫，避免蓋掉對方的修改
+async function replaceNote(d, x, patch, msg) {
+  const id = nid(x), box = await seal({ ...pick(x), ...patch, id });
+  try {
+    await save(msg, [], (idx, cs, ns) => {
+      const f = ns[d], cur = (S.notePlain[d] || []).find(y => nid(y) === id);
+      if (!f || !cur) throw new Error('這則留言已被其他裝置刪除');
+      if (cur.text !== x.text || !!cur.done !== !!x.done) throw new Error('這則留言剛被其他裝置修改，畫面已更新，請確認後再操作');
+      const i = f.m.findIndex(b => b.iv === cur.iv);
+      if (i < 0) throw new Error('找不到這則留言，請按「同步」');
+      f.m[i] = box;
+      const e = dayOf(idx, d); if (e) e.updated = Date.now();
+    }, [d]);
+  } finally { await renderBoard(); }
+}
+const toggleNote = (d, x) => replaceNote(d, x, { done: !x.done }, `note ${x.done ? 'reopen' : 'resolve'} ${d}`);
+async function editNote(d, x, text) {
+  text = text.trim();
+  if (!text) throw new Error('內容不能是空的，要刪除請按「刪除」');
+  const id = nid(x);
+  if (text === x.text) { delete editDraft[id]; return renderBoard(); }
+  if (SECRET_RE.test(text) && !confirm('偵測到疑似密碼 / 金鑰 / 連線字串，確定仍要儲存？')) return;
+  await replaceNote(d, x, { text, edited: Date.now() }, `edit note ${d}`);
+  delete editDraft[id];
   await renderBoard();
 }
 async function postReply(d, x, text) {
@@ -1030,26 +1290,32 @@ async function postReply(d, x, text) {
   if (!text) throw new Error('請先輸入回覆內容');
   if (SECRET_RE.test(text) && !confirm('偵測到疑似密碼 / 金鑰 / 連線字串，確定仍要儲存？')) return;
   const now = Date.now(), re = nid(x);
-  const box = await seal({ kind: 'reply', re, text, at: now, from: device() });
-  await save(`reply ${d}`, [], (idx, cs, ns) => {
-    const f = ns[d];
-    if (!f || !(S.notePlain[d] || []).some(y => nid(y) === re)) throw new Error('原留言已被其他裝置刪除，回覆未存入');
-    f.m.push(box);
-    const e = dayOf(idx, d); if (e) { e.n = f.m.length; e.updated = now; }
-  }, [d]);
-  delete replyDraft[re];
-  await renderBoard();
+  const box = await seal({ kind: 'reply', re, text, at: now, from: device(), dev: devId() });
+  try {
+    await save(`reply ${d}`, [], (idx, cs, ns) => {
+      const f = ns[d];
+      if (!f || !(S.notePlain[d] || []).some(y => nid(y) === re)) throw new Error('原留言已被其他裝置刪除，回覆未存入');
+      f.m.push(box);
+      const e = dayOf(idx, d); if (e) { e.n = f.m.length; e.updated = now; }
+    }, [d]);
+    delete replyDraft[re];
+  } finally { await renderBoard(); }
 }
 // 刪除留言時一併刪除它的回覆（依當下最新解密內容判斷，衝突重試時也正確）
 async function delNote(d, x) {
+  delete editDraft[nid(x)];
+  try { await delNoteInner(d, x); } finally { await renderBoard(); }
+}
+async function delNoteInner(d, x) {
   await save(`delete note ${d}`, [], (idx, cs, ns) => {
     const f = ns[d]; if (!f) return;
-    const gone = new Set([x.iv, ...(S.notePlain[d] || []).filter(y => !x.re && y.re === nid(x)).map(y => y.iv)]);
+    const all = S.notePlain[d] || [], cur = all.find(y => nid(y) === nid(x));
+    if (!cur) return;
+    const gone = new Set([cur.iv, ...all.filter(y => !x.re && y.re === nid(x)).map(y => y.iv)]);
     f.m = f.m.filter(b => !gone.has(b.iv));
     if (!f.m.length) { ns[d] = null; idx.days = (idx.days || []).filter(x => x.d !== d); }
     else { const e = dayOf(idx, d); if (e) { e.n = f.m.length; e.updated = Date.now(); } }
   }, [d]);
-  await renderBoard();
 }
 function noteToCase(x) {
   const lines = x.text.split('\n'), first = lines[0].trim(), asTitle = first.length > 0 && first.length <= 80;
@@ -1169,12 +1435,16 @@ function runSearch() {
   $('#sInfo').textContent = `找到 ${hits.length} 筆${hits.length > 200 ? '，只顯示最新 200 筆' : ''}。案件點一下開啟，留言點一下展開。`;
   hits.slice(0, 200).forEach(d => box.append(hitEl(d, toks)));
 }
-async function openSearch() {
-  show('search');
+// 補載還沒解密的案件與留言後重新查詢
+async function ensureSearch() {
   const info = $('#sInfo');
   await loadAll((n, total) => { info.textContent = `載入並解密中… ${n} / ${total}`; });
-  if ($('#tab-search').hidden) return;
-  runSearch();
+  if (!$('#tab-search').hidden) runSearch();
+}
+async function openSearch() {
+  show('search');
+  if (S.saving === 0) await refresh().catch(e => console.warn(e));
+  await ensureSearch();
   $('#sQ').focus();
 }
 
@@ -1368,14 +1638,16 @@ document.querySelectorAll('.seg button').forEach(b => b.onclick = () => setKind(
 $('#bSend').onclick = e => busy(e.target, postNote);
 $('#bIn').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('#bSend').click(); } });
 $('#bPaste').onclick = async () => { try { $('#bIn').value = await navigator.clipboard.readText(); } catch { toast('瀏覽器不允許讀取剪貼簿，請長按貼上'); } };
-$('#bSync').onclick = e => busy(e.target, () => syncBoard(false));
+$('#bSync').onclick = e => busy(e.target, syncBoard);
 $('#bMore').onclick = e => busy(e.target, () => { S.bDays += 7; return renderBoard(); });
 $('#bFilter').addEventListener('input', () => renderBoard());
 $('#bShow').onchange = () => renderBoard();
-// 手機切回 App / 分頁時自動抓最新留言
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && S.key && !$('#tab-board').hidden) syncBoard(true).catch(() => {});
-});
+// 每 30 秒、以及手機切回 App / 分頁時，自動抓最新資料
+setInterval(poll, POLL_MS);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') poll(); });
+$('#devName').value = lsGet('pax.devname') || '';
+$('#devName').placeholder = `例：公司電腦、iPhone（目前：${device()}）`;
+$('#btnSaveDev').onclick = () => { lsSet('pax.devname', $('#devName').value.trim() || null); $('#devName').placeholder = `例：公司電腦、iPhone（目前：${device()}）`; toast(`裝置名稱：${device()}`); };
 $('#sQ').addEventListener('input', () => { clearTimeout(sTimer); sTimer = setTimeout(runSearch, 200); });
 $('#sScope').onchange = runSearch;
 $('#sState').onchange = runSearch;
@@ -1386,7 +1658,7 @@ $('#btnBio').onclick = e => busy(e.target, bioUnlock);
 $('#btnBioOn').onclick = e => busy(e.target, enableBio);
 $('#btnBioOff').onclick = disableBio;
 $('#pass').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnUnlock').click(); });
-$('#btnLock').onclick = () => lock('已上鎖');
+$('#btnLock').onclick = () => { forgetDevice(); lock('已上鎖'); };
 $('#btnSaveCfg').onclick = saveCfg;
 $('#btnClearCfg').onclick = () => { try { localStorage.removeItem('pax.tok'); sessionStorage.removeItem('pax.tok'); } catch {} $('#cfgToken').value = ''; toast('token 已清除'); };
 $('#btnRekey').onclick = e => busy(e.target, rekey);
@@ -1409,6 +1681,8 @@ $('#btnDone').onclick = e => busy(e.target, setDone);
 $('#btnDelete').onclick = e => busy(e.target, delCase);
 fillCfg();
 bioDetect();
+remUI();
+autoUnlock();
 if (!window.isSecureContext || !crypto.subtle) toast('需在 HTTPS 下使用（GitHub Pages 預設即是）', 5000);
 </script>
 </body>
