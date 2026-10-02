@@ -88,6 +88,10 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px;margin-top:12px
 .msg.done .txt{opacity:.7}
 .msg .txt{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px}
 .msg .txt a{color:var(--accent)}
+.replies{margin:8px 0 2px 6px;padding-left:10px;border-left:2px solid var(--line)}
+.reply{margin:6px 0}.reply .entry-h{margin-bottom:2px}.reply .entry-h b{color:var(--muted)!important;font-size:12px}
+.reply .txt{font-size:14px}
+.rform textarea{font-family:inherit;font-size:15px;min-height:70px;margin-top:8px}
 #toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;z-index:10}
 #toast.show{opacity:1}
 [hidden]{display:none!important}
@@ -564,7 +568,7 @@ async function unlock() {
 }
 function lock(reason) {
   S = blank();
-  $('#caseList').textContent = ''; $('#bList').textContent = ''; $('#bIn').value = ''; $('#bFilter').value = ''; $('#dThread').textContent = ''; $('#dSummary').textContent = ''; $('#dEntryIn').value = '';
+  $('#caseList').textContent = ''; $('#bList').textContent = ''; $('#bIn').value = ''; replyDraft = {}; $('#bFilter').value = ''; $('#dThread').textContent = ''; $('#dSummary').textContent = ''; $('#dEntryIn').value = '';
   ['#dTitle', '#dDesc', '#dEnv', '#dCode'].forEach(s => $(s).textContent = '');
   ['#rkOld', '#rkNew', '#rkNew2', '#impToken', '#impPass', '#dImpPass'].forEach(s => $(s).value = '');
   $('#rekeyBox').hidden = true; $('#rekeyBox').open = false;
@@ -714,6 +718,9 @@ const NOTE_PH = {
   issue: '記錄今天遇到的問題：現象、錯誤訊息、暫時的處理方式…'
 };
 let bKind = 'msg';
+// 回覆框：留言 id → 草稿（重新整理畫面時保留，避免切 App 回來後打到一半的字消失）
+let replyDraft = {};
+const nid = x => x.id || x.iv;
 const pad = n => String(n).padStart(2, '0');
 const dayKey = (t = new Date()) => `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
 const hm = ts => { const t = new Date(ts); return `${pad(t.getHours())}:${pad(t.getMinutes())}`; };
@@ -740,22 +747,63 @@ function linkify(text, into) {
   }
   into.append(text.slice(last));
 }
-const dayText = (d, m) => `【${d} 留言紀錄】\n\n` + m.map(x =>
-  `[${hm(x.at)}] ${NOTE_KIND[x.kind] || x.kind}${x.kind === 'issue' ? (x.done ? '（已解決）' : '（未解決）') : ''}\n${x.text}`).join('\n\n');
-function noteEl(d, x) {
+// 回覆存在原留言的日檔（kind:'reply', re:原留言 id）；原留言不在時當一般留言顯示
+function thread(all) {
+  const ids = new Set(all.filter(x => !x.re).map(nid)), rs = {};
+  for (const x of all) if (x.re && ids.has(x.re)) (rs[x.re] = rs[x.re] || []).push(x);
+  return { top: all.filter(x => !x.re || !ids.has(x.re)), rs };
+}
+const dayText = (d, all) => { const { top, rs } = thread(all); return `【${d} 留言紀錄】\n\n` + top.map(x =>
+  `[${hm(x.at)}] ${NOTE_KIND[x.kind] || '💬 回覆'}${x.kind === 'issue' ? (x.done ? '（已解決）' : '（未解決）') : ''}\n${x.text}`
+  + (rs[nid(x)] || []).map(r => `\n  ↳ [${hm(r.at)}] ${r.from || ''}：${r.text.replace(/\n/g, '\n    ')}`).join('')).join('\n\n'); };
+function replyEl(d, r) {
+  const el = document.createElement('div'); el.className = 'reply';
+  const h = document.createElement('div'); h.className = 'entry-h';
+  const who = document.createElement('b'); who.textContent = `↳ ${hm(r.at)}・${r.from || ''}`;
+  const sp = document.createElement('span');
+  const cp = document.createElement('button'); cp.className = 'sm'; cp.textContent = '複製'; cp.onclick = () => copy(r.text);
+  const del = document.createElement('button'); del.className = 'sm danger'; del.textContent = '刪除';
+  del.onclick = ev => { if (confirm('刪除這則回覆？')) busy(ev.target, () => delNote(d, r)); };
+  h.append(who, sp, cp, del);
+  const body = document.createElement('div'); body.className = 'txt'; linkify(r.text, body);
+  el.append(h, body);
+  return el;
+}
+function replyForm(d, x) {
+  const id = nid(x), f = document.createElement('div'); f.className = 'rform';
+  const ta = document.createElement('textarea'); ta.placeholder = '回覆這則留言…（Ctrl / ⌘ + Enter 送出）'; ta.value = replyDraft[id] || '';
+  ta.oninput = () => { replyDraft[id] = ta.value; };
+  const row = document.createElement('div'); row.className = 'row';
+  const cancel = document.createElement('button'); cancel.textContent = '取消';
+  cancel.onclick = () => { delete replyDraft[id]; f.remove(); };
+  const go = document.createElement('button'); go.className = 'primary'; go.textContent = '🔐 送出回覆';
+  go.onclick = () => busy(go, () => postReply(d, x, ta.value));
+  ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); go.click(); } });
+  row.append(cancel, go); f.append(ta, row);
+  return f;
+}
+function noteEl(d, x, rs = []) {
   const el = document.createElement('div'); el.className = 'msg k-' + x.kind + (x.done ? ' done' : '');
   const h = document.createElement('div'); h.className = 'entry-h';
   const who = document.createElement('b'); who.textContent = x.kind === 'issue' && x.done ? '✅ 已解決' : (NOTE_KIND[x.kind] || x.kind);
   const when = document.createElement('span'); when.textContent = `${hm(x.at)}・${x.from || ''}`;
   const btn = (label, fn, cls = 'sm') => { const b = document.createElement('button'); b.className = cls; b.textContent = label; b.onclick = fn; return b; };
   h.append(who, when, btn('複製', () => copy(x.text)));
+  h.append(btn('↩ 回覆', () => {
+    const id = nid(x);
+    if (el.querySelector('.rform')) return el.querySelector('.rform textarea').focus();
+    replyDraft[id] = replyDraft[id] || '';
+    const f = replyForm(d, x); el.append(f); f.querySelector('textarea').focus();
+  }));
   if (x.kind === 'issue') {
-    h.append(btn(x.done ? '↩ 未解決' : '✅ 解決', ev => busy(ev.target, () => toggleNote(d, x))));
+    h.append(btn(x.done ? '↺ 未解決' : '✅ 解決', ev => busy(ev.target, () => toggleNote(d, x))));
     h.append(btn('➕ 轉案件', () => noteToCase(x)));
   }
-  h.append(btn('刪除', ev => { if (confirm('刪除這則留言？')) busy(ev.target, () => delNote(d, x.iv)); }, 'sm danger'));
+  h.append(btn('刪除', ev => { if (confirm(rs.length ? `刪除這則留言與 ${rs.length} 則回覆？` : '刪除這則留言？')) busy(ev.target, () => delNote(d, x)); }, 'sm danger'));
   const body = document.createElement('div'); body.className = 'txt'; linkify(x.text, body);
   el.append(h, body);
+  if (rs.length) { const rb = document.createElement('div'); rb.className = 'replies'; rs.forEach(r => rb.append(replyEl(d, r))); el.append(rb); }
+  if (nid(x) in replyDraft) el.append(replyForm(d, x));
   return el;
 }
 async function renderBoard() {
@@ -769,9 +817,9 @@ async function renderBoard() {
   const box = $('#bList'); box.textContent = '';
   let hits = 0;
   for (const e of shown) {
-    const all = S.notePlain[e.d] || [];
-    const m = all.filter(x => (!only || x.kind === only || (only === 'open' && x.kind === 'issue' && !x.done))
-      && (!q || x.text.toLowerCase().includes(q)));
+    const all = S.notePlain[e.d] || [], { top, rs } = thread(all);
+    const m = top.filter(x => (!only || x.kind === only || (only === 'open' && x.kind === 'issue' && !x.done))
+      && (!q || [x, ...(rs[nid(x)] || [])].some(y => y.text.toLowerCase().includes(q))));
     if (!m.length) continue;
     hits += m.length;
     const g = document.createElement('div'); g.className = 'day';
@@ -779,11 +827,12 @@ async function renderBoard() {
     const t = document.createElement('div');
     const tb = document.createElement('b'); tb.textContent = dayLabel(e.d);
     const open = all.filter(x => x.kind === 'issue' && !x.done).length;
-    t.append(tb, ` ${all.length} 則${open ? `・❓ ${open} 個未解決` : ''}`);
+    const nr = all.length - top.length;
+    t.append(tb, ` ${top.length} 則${nr ? `・↩ ${nr} 則回覆` : ''}${open ? `・❓ ${open} 個未解決` : ''}`);
     const cp = document.createElement('button'); cp.className = 'sm'; cp.textContent = '📋 複製當日';
     cp.onclick = () => copy(dayText(e.d, all));
     h.append(t, cp); g.append(h);
-    for (const x of [...m].reverse()) g.append(noteEl(e.d, x));
+    for (const x of [...m].reverse()) g.append(noteEl(e.d, x, rs[nid(x)] || []));
     box.append(g);
   }
   if (!hits) box.innerHTML = `<p class="hint">${days.length ? '已載入的日期中沒有符合的留言。' : '還沒有留言。'}</p>`;
@@ -821,7 +870,8 @@ async function postNote() {
   await renderBoard();
 }
 async function toggleNote(d, x) {
-  const box = await seal({ kind: x.kind, text: x.text, at: x.at, from: x.from, done: !x.done });
+  // 重新加密後 iv 會變，用 id 保留原本的識別，回覆才接得上
+  const box = await seal({ id: nid(x), kind: x.kind, text: x.text, at: x.at, from: x.from, done: !x.done });
   await save(`note ${x.done ? 'reopen' : 'resolve'} ${d}`, [], (idx, cs, ns) => {
     const f = ns[d]; if (!f) return;
     const i = f.m.findIndex(b => b.iv === x.iv);
@@ -829,10 +879,28 @@ async function toggleNote(d, x) {
   }, [d]);
   await renderBoard();
 }
-async function delNote(d, iv) {
+async function postReply(d, x, text) {
+  needApi();
+  text = text.trim();
+  if (!text) throw new Error('請先輸入回覆內容');
+  if (SECRET_RE.test(text) && !confirm('偵測到疑似密碼 / 金鑰 / 連線字串，確定仍要儲存？')) return;
+  const now = Date.now(), re = nid(x);
+  const box = await seal({ kind: 'reply', re, text, at: now, from: device() });
+  await save(`reply ${d}`, [], (idx, cs, ns) => {
+    const f = ns[d];
+    if (!f || !(S.notePlain[d] || []).some(y => nid(y) === re)) throw new Error('原留言已被其他裝置刪除，回覆未存入');
+    f.m.push(box);
+    const e = dayOf(idx, d); if (e) { e.n = f.m.length; e.updated = now; }
+  }, [d]);
+  delete replyDraft[re];
+  await renderBoard();
+}
+// 刪除留言時一併刪除它的回覆（依當下最新解密內容判斷，衝突重試時也正確）
+async function delNote(d, x) {
   await save(`delete note ${d}`, [], (idx, cs, ns) => {
     const f = ns[d]; if (!f) return;
-    f.m = f.m.filter(b => b.iv !== iv);
+    const gone = new Set([x.iv, ...(S.notePlain[d] || []).filter(y => !x.re && y.re === nid(x)).map(y => y.iv)]);
+    f.m = f.m.filter(b => !gone.has(b.iv));
     if (!f.m.length) { ns[d] = null; idx.days = (idx.days || []).filter(x => x.d !== d); }
     else { const e = dayOf(idx, d); if (e) { e.n = f.m.length; e.updated = Date.now(); } }
   }, [d]);
