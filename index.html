@@ -28,14 +28,15 @@
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,-apple-system,"Segoe UI","Noto Sans TC","Microsoft JhengHei",sans-serif}
-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top));border-bottom:1px solid var(--line);background:var(--card);position:sticky;top:0;z-index:5}
+header{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px max(16px,calc((100% - 828px) / 2));padding-top:calc(12px + env(safe-area-inset-top));border-bottom:1px solid var(--line);background:var(--card);position:sticky;top:0;z-index:5}
 header h1{font-size:17px;margin:0}
 #lockState{font-size:13px;color:var(--muted)}
 .hdr-r{display:flex;align-items:center;gap:12px;white-space:nowrap}
 .hdr-r a,.hint a{color:var(--accent);text-decoration:none}
 .hdr-r a{font-size:13px}
-nav{display:flex;gap:6px;padding:10px 16px;overflow-x:auto}
-nav button{flex:1;min-width:64px;padding:10px 6px;white-space:nowrap}
+nav{display:flex;gap:6px;padding:12px max(16px,calc((100% - 828px) / 2)) 0}
+nav button{flex:1;min-width:0;padding:9px 6px;white-space:nowrap}
+nav i{font-style:normal;margin-right:4px}
 main{max-width:860px;margin:0 auto;padding:0 16px calc(80px + env(safe-area-inset-bottom))}
 section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-top:12px}
 h2{font-size:16px;margin:0 0 12px}
@@ -50,6 +51,18 @@ button.on{outline:2px solid var(--accent)}
 button.sm{padding:4px 10px;font-size:13px}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .row>button{flex:1 1 140px}
+.row.end{justify-content:flex-end}
+@media (min-width:700px){.row>button{flex:0 0 auto;min-width:120px}}
+@media (max-width:520px){
+  header h1{font-size:16px}
+  nav{gap:4px;padding:8px 10px 0}
+  nav button{display:flex;flex-direction:column;align-items:center;padding:6px 2px;font-size:12px;line-height:1.35}
+  nav i{margin:0;font-size:18px}
+  main{padding-left:10px;padding-right:10px}
+  section{padding:14px 12px}
+  .entry .entry-h span{min-width:0}
+  .acts{gap:4px}.acts button{padding:4px 7px;font-size:12.5px}
+}
 .hint{font-size:13px;color:var(--muted);margin:6px 0 0}
 pre{white-space:pre-wrap;word-break:break-word;background:var(--code);padding:10px;border-radius:8px;font-size:13px;margin:0;max-height:50vh;overflow:auto}
 .case{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer}
@@ -81,6 +94,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px;margin-top:12px
 .day{margin-top:18px}
 .day-h{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:6px}
 .day-h b{color:var(--fg);font-size:14px}
+.day-h button{white-space:nowrap}
 .msg{border:1px solid var(--line);border-left:3px solid var(--r-claude);border-radius:8px;padding:8px 10px;margin:8px 0}
 .msg .entry-h b{color:var(--r-claude)}
 .msg.k-issue{border-left-color:var(--warn)}.msg.k-issue .entry-h b{color:var(--warn)}
@@ -88,7 +102,10 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px;margin-top:12px
 .msg.done .txt{opacity:.7}
 .msg .txt{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px}
 .msg .txt a{color:var(--accent)}
+.acts{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;margin-top:6px}
+.acts button{white-space:nowrap}
 .replies{margin:8px 0 2px 6px;padding-left:10px;border-left:2px solid var(--line)}
+.reply .entry-h span{min-width:0}
 .reply{margin:6px 0}.reply .entry-h{margin-bottom:2px}.reply .entry-h b{color:var(--muted)!important;font-size:12px}
 .reply .txt{font-size:14px}
 .rform textarea{font-family:inherit;font-size:15px;min-height:70px;margin-top:8px}
@@ -108,11 +125,11 @@ mark{background:#ffe58a;color:#1d2330;border-radius:3px;padding:0 1px}
 <body>
 <header><h1>🔐 問題分析交換站</h1><span class="hdr-r"><a href="tool.html">🔐 小工具</a><span id="lockState">🔒 未解鎖</span></span></header>
 <nav>
-  <button data-tab="unlock" class="on">🔑 解鎖</button>
-  <button data-tab="board">💬 留言</button>
-  <button data-tab="list">📋 案件</button>
-  <button data-tab="search">🔎 查詢</button>
-  <button data-tab="new">➕ 新增</button>
+  <button data-tab="unlock" class="on"><i>🔑</i>解鎖</button>
+  <button data-tab="board"><i>💬</i>留言</button>
+  <button data-tab="list"><i>📋</i>案件</button>
+  <button data-tab="search"><i>🔎</i>查詢</button>
+  <button data-tab="new"><i>➕</i>新增</button>
 </nav>
 <main>
 
@@ -157,21 +174,21 @@ mark{background:#ffe58a;color:#1d2330;border-radius:3px;padding:0 1px}
 <section id="tab-board" hidden>
   <h2>💬 留言板</h2>
   <div class="seg">
-    <button data-kind="msg" class="on">💬 訊息（傳到另一台裝置）</button>
-    <button data-kind="issue">❓ 今日問題（記錄留存）</button>
+    <button data-kind="msg" class="on">💬 傳訊息</button>
+    <button data-kind="issue">❓ 記問題</button>
   </div>
   <textarea id="bIn"></textarea>
-  <div class="row">
+  <div class="row end">
     <button id="bPaste">📥 從剪貼簿貼上</button>
     <button class="primary" id="bSend">🔐 加密送出</button>
   </div>
-  <p class="hint">Ctrl / ⌘ + Enter 送出。依日期分檔加密保存，切回此頁會自動同步最新留言。</p>
+  <p class="hint">💬 訊息：傳到另一台裝置；❓ 問題：記錄留存，之後可在 🔎 查詢 找回。Ctrl / ⌘ + Enter 送出，切回此頁會自動同步。</p>
   <div class="bar">
     <input id="bFilter" placeholder="🔎 篩選已載入的留言">
     <select id="bShow"><option value="">全部</option><option value="msg">💬 訊息</option><option value="issue">❓ 問題</option><option value="open">❓ 未解決</option></select>
   </div>
   <div id="bList"></div>
-  <div class="row"><button id="bMore" hidden>⏬ 載入更早 7 天</button><button id="bSync">🔄 同步</button></div>
+  <div class="row end"><button id="bMore" hidden>⏬ 載入更早 7 天</button><button id="bSync">🔄 同步</button></div>
 </section>
 
 <section id="tab-list" hidden>
@@ -213,9 +230,9 @@ mark{background:#ffe58a;color:#1d2330;border-radius:3px;padding:0 1px}
     <button class="primary" id="btnShareClaude" hidden>📤 分享給 Claude</button>
     <button id="btnCopyClaude">📋 複製給 Claude</button>
     <button id="btnOpenClaude">↗ 開啟 Claude</button>
+    <button id="btnCopyCopilot" hidden>📋 複製最新計劃給 MS Copilot</button>
+    <button id="btnAskSummary" hidden>📝 請 Claude 產生結案摘要</button>
   </div>
-  <div class="row"><button id="btnCopyCopilot" hidden>📋 複製最新計劃給 MS Copilot</button></div>
-  <div class="row"><button id="btnAskSummary" hidden>📝 請 Claude 產生結案摘要</button></div>
   <p class="hint" id="dSendHint"></p>
 
   <h3>新增紀錄</h3>
@@ -231,7 +248,7 @@ mark{background:#ffe58a;color:#1d2330;border-radius:3px;padding:0 1px}
     <input id="dImpPass" type="password" autocomplete="off" placeholder="小工具的密語（不會儲存）">
     <div class="row"><button class="primary" id="btnDImport">🔓 解開密文</button></div>
   </div>
-  <div class="row">
+  <div class="row end">
     <button id="btnPaste">📥 從剪貼簿貼上</button>
     <button class="primary" id="btnAddEntry">🔐 加密存入</button>
   </div>
@@ -259,7 +276,7 @@ mark{background:#ffe58a;color:#1d2330;border-radius:3px;padding:0 1px}
   <label>環境 / 系統（語言版本、框架、DB…）</label><input id="nEnv">
   <label>程式碼 / 錯誤訊息</label><textarea id="nCode" style="min-height:200px"></textarea>
   <p class="hint">⚠️ 請先移除密碼、連線字串、API key、客戶個資等機敏內容。</p>
-  <div class="row"><button class="primary" id="btnAdd">🔐 加密並儲存</button></div>
+  <div class="row end"><button class="primary" id="btnAdd">🔐 加密並儲存</button></div>
 </section>
 
 </main>
@@ -912,20 +929,22 @@ function noteEl(d, x, rs = []) {
   const who = document.createElement('b'); who.textContent = x.kind === 'issue' && x.done ? '✅ 已解決' : (NOTE_KIND[x.kind] || x.kind);
   const when = document.createElement('span'); when.textContent = `${hm(x.at)}・${x.from || ''}`;
   const btn = (label, fn, cls = 'sm') => { const b = document.createElement('button'); b.className = cls; b.textContent = label; b.onclick = fn; return b; };
-  h.append(who, when, btn('複製', () => copy(x.text)));
-  h.append(btn('↩ 回覆', () => {
+  h.append(who, when);
+  const acts = document.createElement('div'); acts.className = 'acts';
+  acts.append(btn('複製', () => copy(x.text)));
+  acts.append(btn('↩ 回覆', () => {
     const id = nid(x);
     if (el.querySelector('.rform')) return el.querySelector('.rform textarea').focus();
     replyDraft[id] = replyDraft[id] || '';
     const f = replyForm(d, x); el.append(f); f.querySelector('textarea').focus();
   }));
   if (x.kind === 'issue') {
-    h.append(btn(x.done ? '↺ 未解決' : '✅ 解決', ev => busy(ev.target, () => toggleNote(d, x))));
-    h.append(btn('➕ 轉案件', () => noteToCase(x)));
+    acts.append(btn(x.done ? '↺ 未解決' : '✅ 解決', ev => busy(ev.target, () => toggleNote(d, x))));
+    acts.append(btn('➕ 轉案件', () => noteToCase(x)));
   }
-  h.append(btn('刪除', ev => { if (confirm(rs.length ? `刪除這則留言與 ${rs.length} 則回覆？` : '刪除這則留言？')) busy(ev.target, () => delNote(d, x)); }, 'sm danger'));
+  acts.append(btn('刪除', ev => { if (confirm(rs.length ? `刪除這則留言與 ${rs.length} 則回覆？` : '刪除這則留言？')) busy(ev.target, () => delNote(d, x)); }, 'sm danger'));
   const body = document.createElement('div'); body.className = 'txt'; linkify(x.text, body);
-  el.append(h, body);
+  el.append(h, body, acts);
   if (rs.length) { const rb = document.createElement('div'); rb.className = 'replies'; rs.forEach(r => rb.append(replyEl(d, r))); el.append(rb); }
   if (nid(x) in replyDraft) el.append(replyForm(d, x));
   return el;
