@@ -35,7 +35,7 @@ header h1{font-size:17px;margin:0}
 .hdr-r a,.hint a{color:var(--accent);text-decoration:none}
 .hdr-r a{font-size:13px}
 nav{display:flex;gap:6px;padding:10px 16px;overflow-x:auto}
-nav button{flex:1;min-width:84px}
+nav button{flex:1;min-width:64px;padding:10px 6px;white-space:nowrap}
 main{max-width:860px;margin:0 auto;padding:0 16px calc(80px + env(safe-area-inset-bottom))}
 section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-top:12px}
 h2{font-size:16px;margin:0 0 12px}
@@ -92,6 +92,14 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px;margin-top:12px
 .reply{margin:6px 0}.reply .entry-h{margin-bottom:2px}.reply .entry-h b{color:var(--muted)!important;font-size:12px}
 .reply .txt{font-size:14px}
 .rform textarea{font-family:inherit;font-size:15px;min-height:70px;margin-top:8px}
+.hit{padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer}
+.hit .hh{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.hit .ht{font-weight:600;flex:1;min-width:140px;overflow-wrap:anywhere}
+.hit .hd{font-size:12px;color:var(--muted);margin-top:2px}
+.hit .hs{font-size:14px;margin-top:6px;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--muted)}
+.hit .hs b{color:var(--fg);font-weight:600}
+.hit .full{margin-top:8px;cursor:auto}
+mark{background:#ffe58a;color:#1d2330;border-radius:3px;padding:0 1px}
 #toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;z-index:10}
 #toast.show{opacity:1}
 [hidden]{display:none!important}
@@ -103,6 +111,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px;margin-top:12px
   <button data-tab="unlock" class="on">🔑 解鎖</button>
   <button data-tab="board">💬 留言</button>
   <button data-tab="list">📋 案件</button>
+  <button data-tab="search">🔎 查詢</button>
   <button data-tab="new">➕ 新增</button>
 </nav>
 <main>
@@ -169,6 +178,17 @@ details summary{cursor:pointer;color:var(--muted);font-size:14px;margin-top:12px
   <h2>案件列表</h2>
   <div id="caseList"></div>
   <div class="row"><button id="btnReload">🔄 重新同步</button></div>
+</section>
+
+<section id="tab-search" hidden>
+  <h2>🔎 查詢</h2>
+  <input id="sQ" type="search" placeholder="關鍵字，空白分隔＝全部都要符合（例：印表機 0x11b）">
+  <div class="bar">
+    <select id="sScope" style="flex:1"><option value="">案件＋留言</option><option value="case">📋 只查案件</option><option value="note">💬 只查留言</option></select>
+    <select id="sState" style="flex:1"><option value="">全部狀態</option><option value="open">未解決</option><option value="done">已解決 / 已完成</option></select>
+  </div>
+  <p class="hint" id="sInfo"></p>
+  <div id="sResults"></div>
 </section>
 
 <section id="tab-detail" hidden>
@@ -577,7 +597,7 @@ async function unlock(pass = $('#pass').value) {
 }
 function lock(reason) {
   S = blank();
-  $('#caseList').textContent = ''; $('#bList').textContent = ''; $('#bIn').value = ''; replyDraft = {}; $('#bFilter').value = ''; $('#dThread').textContent = ''; $('#dSummary').textContent = ''; $('#dEntryIn').value = '';
+  $('#caseList').textContent = ''; $('#bList').textContent = ''; $('#bIn').value = ''; replyDraft = {}; $('#sResults').textContent = ''; $('#sQ').value = ''; $('#sInfo').textContent = ''; $('#bFilter').value = ''; $('#dThread').textContent = ''; $('#dSummary').textContent = ''; $('#dEntryIn').value = '';
   ['#dTitle', '#dDesc', '#dEnv', '#dCode'].forEach(s => $(s).textContent = '');
   ['#rkOld', '#rkNew', '#rkNew2', '#impToken', '#impPass', '#dImpPass'].forEach(s => $(s).value = '');
   $('#rekeyBox').hidden = true; $('#rekeyBox').open = false;
@@ -731,7 +751,7 @@ function disableBio() {
 // ---------- views ----------
 function show(tab) {
   if (tab !== 'unlock' && !S.key) { toast('請先解鎖'); tab = 'unlock'; }
-  ['unlock', 'board', 'list', 'new', 'detail'].forEach(t => $('#tab-' + t).hidden = t !== tab);
+  ['unlock', 'board', 'list', 'search', 'new', 'detail'].forEach(t => $('#tab-' + t).hidden = t !== tab);
   if (tab === 'board' || tab === 'list') try { localStorage.setItem('pax.tab', tab); } catch {}
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab || (tab === 'detail' && b.dataset.tab === 'list')));
   window.scrollTo(0, 0);
@@ -942,6 +962,8 @@ async function renderBoard() {
   if (!hits) box.innerHTML = `<p class="hint">${days.length ? '已載入的日期中沒有符合的留言。' : '還沒有留言。'}</p>`;
   else if (q || only) box.insertAdjacentHTML('afterbegin', `<p class="hint">只在最近 ${shown.length} 天中篩選；要找更早的請按下方「載入更早」。</p>`);
   $('#bMore').hidden = days.length <= S.bDays;
+  // 在查詢頁展開的留言按了回覆 / 解決 / 刪除後，查詢結果跟著更新
+  if (!$('#tab-search').hidden) runSearch();
 }
 // 有新 commit 才重新載入；quiet 時不顯示提示
 async function syncBoard(quiet) {
@@ -1017,6 +1039,124 @@ function noteToCase(x) {
   $('#nEnv').value = ''; $('#nCode').value = '';
   show('new');
   toast('已帶入留言內容，補充後按「加密並儲存」', 3000);
+}
+
+// ---------- 查詢（解密全部案件與留言後，在本機搜尋） ----------
+async function pool(items, n, fn) {
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => { while (i < items.length) await fn(items[i++]); }));
+}
+async function loadAll(onProgress) {
+  const cs = S.idx.cases.map(e => e.id).filter(id => !S.plain[id]);
+  const ds = (S.idx.days || []).map(e => e.d).filter(d => !S.notePlain[d]);
+  const total = cs.length + ds.length; let done = 0;
+  const tick = () => onProgress(++done, total);
+  await pool(cs, 6, async id => { try { await loadCase(id); } catch (e) { console.warn(id, e); } tick(); });
+  await pool(ds, 6, async d => { try { await loadDay(d); } catch (e) { console.warn(d, e); } tick(); });
+}
+// 每筆可搜尋的資料：{ type, kind, title, at, date, done, fields: [[欄位名, 文字]], open() }
+function searchDocs() {
+  const docs = [];
+  for (const e of S.idx.cases) {
+    const c = S.plain[e.id]; if (!c) continue;
+    const { p, t, s } = c;
+    docs.push({
+      type: 'case', title: p.title, at: e.updated, done: e.status === 'done', status: e.status, id: e.id,
+      fields: [['結案摘要', s ? s.text : ''], ['標題', p.title], ['問題描述', p.desc], ['環境', p.env], ['程式碼 / 錯誤', p.code],
+        ...t.map((x, i) => [`紀錄 #${i + 1} ${ROLE[x.role] || ''}`, x.text])]
+    });
+  }
+  for (const e of S.idx.days || []) {
+    const all = S.notePlain[e.d]; if (!all) continue;
+    const { top, rs } = thread(all);
+    for (const x of top) {
+      const replies = rs[nid(x)] || [];
+      docs.push({
+        type: 'note', kind: x.kind, title: x.text.split('\n')[0].slice(0, 80), at: x.at, date: e.d, done: x.kind === 'issue' ? !!x.done : null,
+        note: x, replies,
+        fields: [['內容', x.text], ...replies.map(r => [`回覆 ${hm(r.at)}`, r.text])]
+      });
+    }
+  }
+  return docs;
+}
+const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function highlight(text, toks, into) {
+  if (!toks.length) { into.append(text); return; }
+  const re = new RegExp(toks.map(escRe).join('|'), 'gi');
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    into.append(text.slice(last, m.index));
+    const k = document.createElement('mark'); k.textContent = m[0]; into.append(k);
+    last = m.index + m[0].length;
+  }
+  into.append(text.slice(last));
+}
+// 取第一個含關鍵字的欄位，擷取關鍵字前後的片段
+function snippet(doc, toks) {
+  for (const [name, text] of doc.fields) {
+    if (!text) continue;
+    const low = text.toLowerCase(), pos = toks.length ? Math.min(...toks.map(t => low.indexOf(t)).filter(i => i >= 0)) : 0;
+    if (pos === Infinity) continue;
+    const a = Math.max(0, pos - 40), b = Math.min(text.length, pos + 140);
+    return [name, (a ? '…' : '') + text.slice(a, b).replace(/\s*\n\s*/g, ' ⏎ ') + (b < text.length ? '…' : '')];
+  }
+  const f = doc.fields.find(f => f[1]) || ['', ''];
+  return [f[0], f[1].slice(0, 140)];
+}
+function hitEl(doc, toks) {
+  const el = document.createElement('div'); el.className = 'hit';
+  const hh = document.createElement('div'); hh.className = 'hh';
+  const ht = document.createElement('div'); ht.className = 'ht'; highlight(doc.title || '(未命名)', toks, ht);
+  const bd = document.createElement('span'); bd.className = 'badge';
+  if (doc.type === 'case') { bd.classList.add('s-' + doc.status); bd.textContent = '📋 ' + (STATUS[doc.status] || doc.status); }
+  else if (doc.kind === 'issue') { bd.classList.add(doc.done ? 's-done' : 's-open'); bd.textContent = doc.done ? '❓ 已解決' : '❓ 未解決'; }
+  else { bd.classList.add('s-analyzed'); bd.textContent = NOTE_KIND[doc.kind] || '💬 留言'; }
+  hh.append(ht, bd);
+  const hd = document.createElement('div'); hd.className = 'hd';
+  hd.textContent = doc.type === 'case' ? `更新：${fmt(doc.at)}` : `${dayLabel(doc.date)} ${hm(doc.at)}・${doc.note.from || ''}${doc.replies.length ? `・↩ ${doc.replies.length} 則回覆` : ''}`;
+  const [name, sn] = snippet(doc, toks);
+  const hs = document.createElement('div'); hs.className = 'hs';
+  const nb = document.createElement('b'); nb.textContent = name + '：'; hs.append(nb); highlight(sn, toks, hs);
+  el.append(hh, hd, hs);
+  if (doc.type === 'case') el.onclick = () => openCase(doc.id).catch(err => toast('❌ ' + err.message, 4000));
+  else el.onclick = ev => {
+    if (ev.target.closest('.full')) return;
+    const f = el.querySelector('.full');
+    if (f) { f.remove(); hs.hidden = false; return; }
+    hs.hidden = true;
+    const full = document.createElement('div'); full.className = 'full';
+    full.append(noteEl(doc.date, doc.note, doc.replies));
+    el.append(full);
+  };
+  return el;
+}
+let sTimer;
+function runSearch() {
+  if (!S.key) return;
+  const toks = $('#sQ').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const scope = $('#sScope').value, state = $('#sState').value;
+  const box = $('#sResults'); box.textContent = '';
+  const docs = searchDocs();
+  const nCase = docs.filter(d => d.type === 'case').length;
+  if (!toks.length && !scope && !state) {
+    $('#sInfo').textContent = `可查詢 ${nCase} 個案件、${docs.length - nCase} 則留言（含回覆、結案摘要、處理紀錄）。輸入關鍵字，或選擇條件列出全部。`;
+    return;
+  }
+  const hits = docs.filter(d => (!scope || d.type === scope)
+    && (!state || (state === 'open' ? d.done === false : d.done === true))
+    && toks.every(t => d.fields.some(([, x]) => x && x.toLowerCase().includes(t))))
+    .sort((a, b) => b.at - a.at);
+  $('#sInfo').textContent = `找到 ${hits.length} 筆${hits.length > 200 ? '，只顯示最新 200 筆' : ''}。案件點一下開啟，留言點一下展開。`;
+  hits.slice(0, 200).forEach(d => box.append(hitEl(d, toks)));
+}
+async function openSearch() {
+  show('search');
+  const info = $('#sInfo');
+  await loadAll((n, total) => { info.textContent = `載入並解密中… ${n} / ${total}`; });
+  if ($('#tab-search').hidden) return;
+  runSearch();
+  $('#sQ').focus();
 }
 
 // ---------- prompts ----------
@@ -1201,6 +1341,7 @@ const cur = () => S.plain[S.current];
 // ---------- wiring ----------
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
   if (b.dataset.tab === 'board' && S.key) return openBoard();
+  if (b.dataset.tab === 'search' && S.key) return openSearch().catch(e => toast('❌ ' + e.message, 4000));
   if (b.dataset.tab === 'list' && S.key) renderList();
   show(b.dataset.tab);
 });
@@ -1216,6 +1357,9 @@ $('#bShow').onchange = () => renderBoard();
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && S.key && !$('#tab-board').hidden) syncBoard(true).catch(() => {});
 });
+$('#sQ').addEventListener('input', () => { clearTimeout(sTimer); sTimer = setTimeout(runSearch, 200); });
+$('#sScope').onchange = runSearch;
+$('#sState').onchange = runSearch;
 setKind('msg');
 // 有開 Face ID 且密語欄空白 → 按「解鎖並載入」也走 Face ID（同股市儀表板）
 $('#btnUnlock').onclick = e => busy(e.target, () => !$('#pass').value && bioAvail && bioGet() ? bioUnlock() : unlock());
